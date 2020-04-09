@@ -15,9 +15,23 @@ static const int KBlockSize = 4096;
 
 class Buffer {
 public:
-    Buffer();
-    Buffer(size_t n);
-    ~Buffer();
+    Buffer() : _offset(0)
+    {
+        _allocPtr = new char[KBlockSize];
+        _totalSize = KBlockSize;
+    }
+    Buffer(size_t n) : _offset(0)
+    {
+        _allocPtr = new char[n];
+        _totalSize = n;
+    }
+    ~Buffer()
+    {
+        if (_allocPtr) {
+            delete[] _allocPtr;
+            _allocPtr = NULL;
+        }
+    }
 
     bool Empty()
     {
@@ -64,7 +78,7 @@ public:
     {
         return tryAllocAndWrite(&c, 1);
     }
-    
+
     int Remove(size_t n)
     {
         CommRWLock pMutex(&_lock);
@@ -73,6 +87,7 @@ public:
         ::memmove(_allocPtr, _allocPtr + readSize, _offset);
         return readSize;
     }
+
 private:
     int tryAllocAndWrite(char* p, int n)
     {
@@ -115,26 +130,6 @@ private:
     size_t    _totalSize;
     size_t    _offset;
 };
-
-Buffer::Buffer() : _offset(0)
-{
-    _allocPtr  = new char[KBlockSize];
-    _totalSize = KBlockSize;
-}
-
-Buffer::Buffer(size_t n) : _offset(0)
-{
-    _allocPtr  = new char[n];
-    _totalSize = n;
-}
-
-Buffer::~Buffer()
-{
-    if (_allocPtr) {
-        delete[] _allocPtr;
-        _allocPtr = NULL;
-    }
-}
 
 }  // namespace bytes
 #endif
