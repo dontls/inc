@@ -37,7 +37,7 @@ all-objs += $(target-y)
 
 all: $(all-objs) 
 $(subdir-y):
-	$(Q)@make -C $@ -f $(TOPDIR)/scripts/builtin_build.Makefile
+	$(Q)@make -C $@ -f $(TOPDIR)/scripts/built-in.mk
   
 built-in.o: $(objs) $(subdir-objs)
 	$(Q)$(LD) -r -o $@ $^

@@ -4,7 +4,6 @@
 int main(int argc, char const *argv[])
 {
     printf("%s\n", NowUnixString().c_str());
-    mSleep(1000);
     printf("%s\n", NowUnixString().c_str());
     unsigned long long startTime = NowTickCount();
     if (!TimeoutMsec(startTime, 90)) {

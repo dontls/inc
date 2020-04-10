@@ -33,7 +33,7 @@ __clean: $(subdir-y)
 # Descending
 # ---------------------------------------------------------------------------
 $(subdir-y):
-	$(Q)@make -C $@ -f $(TOPDIR)/scripts/builtin_clean.Makefile
+	$(Q)@make -C $@ -f $(TOPDIR)/scripts/built-clean.mk
 
 
 # Declare the contents of the .PHONY variable as phony.  We keep that

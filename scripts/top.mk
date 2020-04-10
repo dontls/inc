@@ -5,7 +5,6 @@ else
 Q := @
 ECHO := @echo
 endif
-TOPDIR := $(CURDIR)
 export Q ECHO TOPDIR
 #-------------------------------------------------------------------------------
 
@@ -46,7 +45,7 @@ all:: $(OBJS) $(APP-build) $(LIB-build)
 	$(ECHO) -e "\033[36mDone $^\033[0m"
 
 $(OBJS)::
-	$(Q)@make -C $(DIR) -f $(TOPDIR)/scripts/builtin_build.Makefile
+	$(Q)@make -C $(DIR) -f $(TOPDIR)/scripts/built-in.mk
 
 $(LIB-build):: 
 	$(Q)$(CXX) $(CXXFLAGS) -shared -Wl,-soname,$@ $(LDFLAGS) -o $@ $(OBJS) $>
@@ -63,7 +62,7 @@ clean: $(clean-dirs)
 
 PHONY += $(clean-dirs)
 $(clean-dirs):
-	$(Q)@make -C $(patsubst _clean_%,%,$@) -f $(TOPDIR)/scripts/builtin_clean.Makefile
+	$(Q)@make -C $(patsubst _clean_%,%,$@) -f $(TOPDIR)/scripts/built-clean.mk
 
 distclean: clean
 	$(Q)@rm -f $(shell find $(CURDIR) -name "*.d")

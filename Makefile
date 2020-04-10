@@ -1,10 +1,13 @@
 
+TOPDIR := $(CURDIR)
+
 LDFLAGS += -pthread
 
-INCLUDES += -I$(CURDIR)/include
+# 这里要使用绝对路径
+INCLUDES += -I $(CURDIR)/include 
 
 CXXFLAGS += $(INCLUDES)
 
 DIR := example/
 
-include scripts/builtin.mk
+include $(TOPDIR)/scripts/top.mk
