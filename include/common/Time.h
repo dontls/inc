@@ -11,7 +11,7 @@ inline unsigned long long NowTickCount()
 {
     struct timeval tv;
     gettimeofday(&tv, 0);
-    unsigned long long llret = tv.tv_usec;
+    unsigned long long llret = tv.tv_sec;
     llret *= 1000;
     llret += tv.tv_usec / 1000;
     return llret;
