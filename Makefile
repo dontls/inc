@@ -4,7 +4,7 @@ TOPDIR := $(CURDIR)
 LDFLAGS += -pthread
 
 # 这里要使用绝对路径
-INCLUDES += -I $(CURDIR)/include 
+INCLUDES += -I $(CURDIR) 
 
 CXXFLAGS += $(INCLUDES)
 
