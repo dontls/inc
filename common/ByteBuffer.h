@@ -15,15 +15,15 @@ static const int KBlockSize = 4096;
 
 class Buffer {
 public:
-    Buffer() : _offset(0)
+    Buffer() : _offset(0), _totalSize(KBlockSize)
     {
         _allocPtr = new char[KBlockSize];
-        _totalSize = KBlockSize;
+        _maxSize = _totalSize;
     }
-    Buffer(size_t n) : _offset(0)
+    Buffer(size_t n) : _offset(0), _totalSize(KBlockSize)
     {
-        _allocPtr = new char[n];
-        _totalSize = n;
+        _allocPtr = new char[KBlockSize];
+        _maxSize = n;
     }
     ~Buffer()
     {
@@ -56,8 +56,7 @@ public:
     int Write(char* p, size_t n)
     {
         assert(NULL != p || 0 > 0);
-        tryAllocAndWrite(p, n);
-        return n;
+        return tryAllocAndWrite(p, n);
     }
 
     int Read(char* p, size_t n)
@@ -68,15 +67,15 @@ public:
 
     int WriteString(std::string s)
     {
-        if (!s.empty()) {
-            tryAllocAndWrite(( char* )s.c_str(), s.length());
+        if (s.length() <= 0) {
+            return 0;
         }
-        return s.length();
+        return Write(( char* )s.c_str(), s.length());
     }
 
     int WriteByte(char c)
     {
-        return tryAllocAndWrite(&c, 1);
+        return Write(&c, 1);
     }
 
     int Remove(size_t n)
@@ -91,6 +90,9 @@ public:
 private:
     int tryAllocAndWrite(char* p, int n)
     {
+        if (_offset + n > _maxSize) {
+            return -1;
+        }
         CommRWLock pMutex(&_lock);
         if (n > (_totalSize - _offset)) {
             _totalSize += n;
@@ -128,6 +130,7 @@ private:
     CommMutex _lock;
     char*     _allocPtr;
     size_t    _totalSize;
+    size_t    _maxSize;
     size_t    _offset;
 };
 
