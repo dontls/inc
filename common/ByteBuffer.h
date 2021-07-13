@@ -15,15 +15,17 @@ static const int KBlockSize = 4096;
 
 class Buffer {
 public:
-    Buffer() : _offset(0), _totalSize(KBlockSize)
+    Buffer() : _offset(0)
     {
-        _allocPtr = new char[KBlockSize];
-        _maxSize = _totalSize;
+        _allocSize = KBlockSize;
+        _allocPtr = new char[_allocSize];
+        _totalSize = _allocSize;
     }
-    Buffer(size_t n) : _offset(0), _totalSize(KBlockSize)
+    Buffer(size_t n) : _offset(0)
     {
-        _allocPtr = new char[KBlockSize];
-        _maxSize = n;
+        _allocSize = KBlockSize;
+        _allocPtr = new char[_allocSize];
+        _totalSize = n;
     }
     ~Buffer()
     {
@@ -40,7 +42,7 @@ public:
 
     size_t Cap()
     {
-        return _totalSize;
+        return _allocSize;
     }
 
     size_t Len()
@@ -62,7 +64,7 @@ public:
     int Read(char* p, size_t n)
     {
         assert(NULL != p && n > 0);
-        return tryRead(&p, n);
+        return tryRead(p, n);
     }
 
     int WriteString(std::string s)
@@ -90,47 +92,36 @@ public:
 private:
     int tryAllocAndWrite(char* p, int n)
     {
-        if (_offset + n > _maxSize) {
+        int nsize = _offset + n;
+        if (nsize > _totalSize) {
             return -1;
         }
         CommRWLock pMutex(&_lock);
-        if (n > (_totalSize - _offset)) {
-            _totalSize += n;
-            char* pAllocPtr = allocateMemory(_totalSize);
-            ::memcpy(pAllocPtr, _allocPtr, _offset);
-            if (_allocPtr) {
-                delete[] _allocPtr;
-                _allocPtr = NULL;
-            }
-            _allocPtr = pAllocPtr;
+        if (_allocSize < nsize) {
+            _allocPtr = ( char* )realloc(_allocPtr, nsize);
+            assert(_allocPtr);
+            _allocSize = nsize;
         }
         ::memcpy(_allocPtr + _offset, p, n);
-        _offset += n;
+        _offset = nsize;
         return n;
     }
 
-    int tryRead(char** p, int n)
+    int tryRead(char* p, int n)
     {
         CommRWLock pMutex(&_lock);
         int        readSize = n < _offset ? n : _offset;
-        memcpy(*p, _allocPtr, readSize);
+        memcpy(p, _allocPtr, readSize);
         _offset -= readSize;
         ::memmove(_allocPtr, _allocPtr + readSize, _offset);
         return readSize;
     }
 
-    char* allocateMemory(size_t blockBytes)
-    {
-        char* result = new char[blockBytes];
-        assert(NULL != result);
-        return result;
-    }
-
 private:
     CommMutex _lock;
     char*     _allocPtr;
+    size_t    _allocSize;
     size_t    _totalSize;
-    size_t    _maxSize;
     size_t    _offset;
 };
 
