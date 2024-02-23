@@ -5,31 +5,24 @@
 #include <stdio.h>
 
 class Fmt {
-private:
-    /* data */
-public:
-    template <typename T>
-    Fmt(const char* fmt, T v);
-    const char* Data() const
-    {
-        return _buf;
-    }
+ private:
+  /* data */
+ public:
+  template <typename T>
+  Fmt(const char* fmt, T v);
+  const char* Data() const { return _buf; }
 
-    int Length() const
-    {
-        return _length;
-    }
+  int Length() const { return _length; }
 
-private:
-    char _buf[32];
-    int  _length;
+ private:
+  char _buf[32];
+  int _length;
 };
 
 template <typename T>
-Fmt::Fmt(const char* fmt, T v)
-{
-    _length = snprintf(_buf, sizeof(_buf), fmt, v);
-    assert(static_cast<size_t>(_length) < sizeof(_buf));
+Fmt::Fmt(const char* fmt, T v) {
+  _length = snprintf(_buf, sizeof(_buf), fmt, v);
+  assert(static_cast<size_t>(_length) < sizeof(_buf));
 }
 
 template Fmt::Fmt(const char* fmt, char);
