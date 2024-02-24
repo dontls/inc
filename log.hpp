@@ -23,18 +23,16 @@
 
 #define DBG_END "\033[0m"
 
-#define LOG(format, ...)                                                     \
-  {                                                                          \
-    printf("%s | %s:%d " format, Time::Format().c_str(), __FILE__, __LINE__, \
-           ##__VA_ARGS__);                                                   \
-  }
-#define LOG_ERROR(format, ...)                                               \
-  {                                                                          \
-    printf(DBG_FG_RED "%s | %s: %d " format DBG_END, Time::Format().c_str(), \
-           __FILE__, __LINE__, ##__VA_ARGS__);                               \
-  }
-#define LOG_WARN(format, ...)                                          \
-  {                                                                    \
-    printf(DBG_FG_YELLOW "%s | %s: %d " format DBG_END,                \
-           Time::Format().c_str(), __FILE__, __LINE__, ##__VA_ARGS__); \
-  }
+#define LOG(format, ...)                                                                         \
+    {                                                                                            \
+        printf("%s | %s:%d " format, Time::Format().c_str(), __FILE__, __LINE__, ##__VA_ARGS__); \
+    }
+#define LOG_ERROR(format, ...)                                                                                       \
+    {                                                                                                                \
+        printf(DBG_FG_RED "%s | %s: %d " format DBG_END, Time::Format().c_str(), __FILE__, __LINE__, ##__VA_ARGS__); \
+    }
+#define LOG_WARN(format, ...)                                                                           \
+    {                                                                                                   \
+        printf(DBG_FG_YELLOW "%s | %s: %d " format DBG_END, Time::Format().c_str(), __FILE__, __LINE__, \
+               ##__VA_ARGS__);                                                                          \
+    }
