@@ -10,13 +10,13 @@
 #include <string>
 
 class BytesBuffer {
- private:
+private:
   std::mutex lock_;
-  char* ptr_;
+  char *ptr_;
   size_t total_;
   size_t offset_;
 
- public:
+public:
   BytesBuffer() : offset_(0) {
     total_ = 2048;
     ptr_ = new char[total_];
@@ -38,10 +38,10 @@ class BytesBuffer {
 
   size_t Len() { return offset_; }
 
-  char* Bytes() { return ptr_; }
+  char *Bytes() { return ptr_; }
 
   // 写入指定长度
-  size_t Write(char* p, size_t n) {
+  size_t Write(char *p, size_t n) {
     assert(NULL != p || 0 > 0);
     return tryWriteByRealloc(p, n);
   }
@@ -50,18 +50,18 @@ class BytesBuffer {
   size_t WriteByte(char c) { return Write(&c, 1); }
 
   // 写入Buffer
-  size_t Write(BytesBuffer* b) { return Write(b->Bytes(), b->Len()); }
+  size_t Write(BytesBuffer *b) { return Write(b->Bytes(), b->Len()); }
 
   // 写入字符串
-  size_t WriteString(std::string& s) {
+  size_t WriteString(std::string &s) {
     if (s.length() <= 0) {
       return 0;
     }
-    return Write((char*)s.c_str(), s.length());
+    return Write((char *)s.c_str(), s.length());
   }
 
   // 读数据
-  size_t Read(char* p, size_t n) {
+  size_t Read(char *p, size_t n) {
     assert(NULL != p && n > 0);
     return tryRead(p, n);
   }
@@ -87,19 +87,19 @@ class BytesBuffer {
     offset_ = 0;
     if (total_ < n) {
       total_ = n;
-      ptr_ = (char*)realloc(ptr_, total_);
+      ptr_ = (char *)realloc(ptr_, total_);
     }
     ::memset(ptr_, 0, total_);
     assert(ptr_);
   }
 
- private:
-  size_t tryWriteByRealloc(char* p, size_t n) {
+private:
+  size_t tryWriteByRealloc(char *p, size_t n) {
     std::lock_guard<std::mutex> lock(lock_);
     size_t s = offset_ + n;
     if (s > total_) {
       total_ += 2 * n;
-      ptr_ = (char*)realloc(ptr_, total_);
+      ptr_ = (char *)realloc(ptr_, total_);
       assert(ptr_);
     }
     ::memcpy(ptr_ + offset_, p, n);
@@ -107,7 +107,7 @@ class BytesBuffer {
     return n;
   }
 
-  size_t tryRead(char* p, size_t n) {
+  size_t tryRead(char *p, size_t n) {
     std::lock_guard<std::mutex> lock(lock_);
     size_t readSize = n < offset_ ? n : offset_;
     ::memcpy(p, ptr_, readSize);

@@ -1,7 +1,7 @@
 #include "../fmt.hpp"
 #include <iostream>
 
-int main(int argc, char const* argv[]) {
+int main(int argc, char const *argv[]) {
   Fmt us(".%06d", 1000);
   std::cout << us.Data() << "\t" << us.Length() << "\n";
 

@@ -4,59 +4,56 @@
 #define __COMM_FACTORY_H__
 
 #include <functional>
-#include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 
 // T 需要传入基类
-template <typename T>
-class CFactory {
- public:
+template <typename T> class CFactory {
+public:
   // N 子类，这里会把对应子类添加到Map中
-  template <typename N>
-  struct register_t {
+  template <typename N> struct register_t {
     template <typename... Args>
-    register_t(const std::string& key, Args... args) {
+    register_t(const std::string &key, Args... args) {
       CFactory::Instance()->_map.emplace(key, [=] { return new N(args...); });
     }
   };
 
   // 普通指针
-  static auto NormalPtr(const std::string& key) -> T* {
+  static auto NormalPtr(const std::string &key) -> T * {
     return CFactory::Instance()->Find(key);
   }
 
   // unique_ptr指针
-  static std::unique_ptr<T> UniquePtr(const std::string& key) {
+  static std::unique_ptr<T> UniquePtr(const std::string &key) {
     return std::unique_ptr<T>(NormalPtr(key));
   }
 
   // shared_ptr指针
-  static std::shared_ptr<T> SharedPtr(const std::string& key) {
+  static std::shared_ptr<T> SharedPtr(const std::string &key) {
     return std::shared_ptr<T>(NormalPtr(key));
   }
 
- private:
+private:
   CFactory(){};
-  CFactory(const CFactory&) = delete;
-  CFactory(CFactory&&) = delete;
-  CFactory& operator=(const CFactory&) = delete;
+  CFactory(const CFactory &) = delete;
+  CFactory(CFactory &&) = delete;
+  CFactory &operator=(const CFactory &) = delete;
 
   // 单例模式
-  static auto Instance() -> CFactory<T>* {
+  static auto Instance() -> CFactory<T> * {
     static CFactory<T> ins;
     return &ins;
   }
 
-  auto Find(const std::string& key) -> T* {
+  auto Find(const std::string &key) -> T * {
     if (_map.find(key) == _map.end())
       throw std::invalid_argument("key is not exist!");
 
     // 这里会动态转化指针，如果不是继承关系，返回nullptr
-    return dynamic_cast<T*>(_map[key]());
+    return dynamic_cast<T *>(_map[key]());
   }
-  std::map<std::string, std::function<T*()>> _map;
+  std::map<std::string, std::function<T *()>> _map;
 };
 #endif
 

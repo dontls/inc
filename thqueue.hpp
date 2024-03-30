@@ -17,18 +17,17 @@
  * T为队列元素类型
  * 因为有std::mutex和std::condition_variable类成员，所以此类型不支持复制构造函数也不支持赋值操作(=)
  */
-template <typename T>
-class CQueue {
- private:
+template <typename T> class CQueue {
+private:
   mutable std::mutex mtx;
   mutable std::condition_variable cv;
   using queue_type = std::queue<T>;
   queue_type data;
   CQueue() = default;
-  CQueue(const CQueue&) = delete;
-  CQueue& operator=(const CQueue&) = delete;
+  CQueue(const CQueue &) = delete;
+  CQueue &operator=(const CQueue &) = delete;
 
- public:
+public:
   using value_type = typename queue_type::value_type;
   using container_type = typename queue_type::container_type;
 
@@ -43,7 +42,7 @@ class CQueue {
       data.push(*itr);
     }
   }
-  explicit CQueue(const container_type& c) : data(c) {}
+  explicit CQueue(const container_type &c) : data(c) {}
 
   /**
    * @description: 使用初始化列表为参数的构造函数
@@ -58,7 +57,7 @@ class CQueue {
    * @param {type}
    * @return:
    */
-  void Push(const value_type& new_value) {
+  void Push(const value_type &new_value) {
     std::lock_guard<std::mutex> lk(mtx);
     data.push(std::move(new_value));
     cv.notify_one();
@@ -82,9 +81,10 @@ class CQueue {
    * @param {type}
    * @return:
    */
-  bool TryPop(value_type& value) {
+  bool TryPop(value_type &value) {
     std::lock_guard<std::mutex> lk(mtx);
-    if (data.empty()) return false;
+    if (data.empty())
+      return false;
     value = std::move(data.front());
     data.pop();
     return true;

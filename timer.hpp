@@ -5,11 +5,11 @@
 #include <thread>
 
 class CTimer {
- private:
+private:
   /* data */
   bool m_bClear = false;
 
- public:
+public:
   CTimer(/* args */) {}
   ~CTimer() {}
 
@@ -20,9 +20,11 @@ class CTimer {
   void SetTimeout(std::function<void()> task, int msDelay) {
     this->m_bClear = false;
     std::thread t([=]() {
-      if (this->m_bClear) return;
+      if (this->m_bClear)
+        return;
       std::this_thread::sleep_for(std::chrono::microseconds(msDelay));
-      if (this->m_bClear) return;
+      if (this->m_bClear)
+        return;
       task();
     });
     t.detach();
@@ -36,10 +38,12 @@ class CTimer {
     this->m_bClear = false;
     std::thread t([=]() {
       while (true) {
-        if (this->m_bClear) return;
+        if (this->m_bClear)
+          return;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(msInterval));
-        if (this->m_bClear) return;
+        if (this->m_bClear)
+          return;
 
         task();
       }

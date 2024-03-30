@@ -8,14 +8,14 @@
 #include <unistd.h>
 #include <string>
 class CSingleProc {
- public:
+public:
   CSingleProc(std::string procname) { procExist(procname); }
 
- private:
-  CSingleProc(const CSingleProc&) = default;
-  const CSingleProc& operator=(const CSingleProc&) = delete;
+private:
+  CSingleProc(const CSingleProc &) = default;
+  const CSingleProc &operator=(const CSingleProc &) = delete;
 
-  void procExist(std::string& procname) {
+  void procExist(std::string &procname) {
     int fd;
     char buf[16], fname[100];
     sprintf(fname, "/var/run/%s.pid", procname.c_str());

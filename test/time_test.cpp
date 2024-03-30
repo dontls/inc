@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-int main(int argc, char const* argv[]) {
+int main(int argc, char const *argv[]) {
   printf("%s\n", Time::Format().c_str());
   printf("%s\n", Time::Format().c_str());
   long long startTime = Time::UnixMilli();
