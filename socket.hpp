@@ -6,50 +6,50 @@
 // ========================================================================
 //  Include Files
 // ========================================================================
-#ifdef _WIN32  // windows 95 and above
+#ifdef _WIN32 // windows 95 and above
 #include "Ws2tcpip.h"
-#include "winsock2.h"  // almost everything is contained in one file.
+#include "windows.h" // almost everything is contained in one file.
 
 #ifndef socklen_t
 typedef int socklen_t;
 #endif
 
-#else                    // UNIX/Linux
-#include <sys/types.h>   // header containing all basic data types and
-                         // typedefs
-#include <sys/socket.h>  // header containing socket data types and
-                         // functions
-#include <arpa/inet.h>   // contains all inet_* functions
-#include <errno.h>       // contains the error functions
-#include <fcntl.h>       // file control
-#include <netdb.h>       // for DNS - gethostbyname()
-#include <netinet/in.h>  // IPv4 and IPv6 stuff
-#include <unistd.h>      // for gethostname()
+#else                   // UNIX/Linux
+#include <sys/types.h>  // header containing all basic data types and
+// typedefs
+#include <sys/socket.h> // header containing socket data types and
+// functions
+#include <arpa/inet.h>  // contains all inet_* functions
+#include <errno.h>      // contains the error functions
+#include <fcntl.h>      // file control
+#include <netdb.h>      // for DNS - gethostbyname()
+#include <netinet/in.h> // IPv4 and IPv6 stuff
+#include <unistd.h>     // for gethostname()
 #endif
 
 #include <exception>
 #include <string.h>
-
 namespace Net {
 // ========================================================================
 //  Globals and Typedefs
 // ========================================================================
-#ifdef _WIN32  // windows 95 and above
+#ifdef _WIN32            // windows 95 and above
+typedef SOCKET socket_t; // Although sockets are int's on unix,
+                         // windows uses it's own typedef of
+                         // SOCKET to represent them. If you look
+                         // in the Winsock2 source code, you'll see
+                         // that it is just a typedef for int, but
+                         // there is absolutely no garuntee that it
+                         // won't change in a later version.
+                         // therefore, in order to avoid confusion,
+                         // this library will create it's own basic
+                         // socket descriptor typedef
 
-typedef SOCKET sock;  // Although sockets are int's on unix,
-                      // windows uses it's own typedef of
-                      // SOCKET to represent them. If you look
-                      // in the Winsock2 source code, you'll see
-                      // that it is just a typedef for int, but
-                      // there is absolutely no garuntee that it
-                      // won't change in a later version.
-                      // therefore, in order to avoid confusion,
-                      // this library will create it's own basic
-                      // socket descriptor typedef
-
-#else  // UNIX/Linux
-typedef int sock;  // see the description above.
-
+#else // UNIX/Linux
+typedef int socket_t; // see the description above.
+#ifndef INVALID_SOCKET
+#define INVALID_SOCKET (-1)
+#endif
 #endif
 
 // ========================================================================
@@ -57,8 +57,8 @@ typedef int sock;  // see the description above.
 //  order. It's easier this way; ports are usually accessed as numbers,
 //  but IP addresses are better accessed through the string functions.
 // ========================================================================
-typedef unsigned short int port;      // define the port type.
-typedef unsigned long int ipaddress;  // an IP address for IPv4
+typedef unsigned short int port;     // define the port type.
+typedef unsigned long int ipaddress; // an IP address for IPv4
 
 // ========================================================================
 // Description: Error codes for the socket library.
@@ -121,78 +121,78 @@ enum Error {
 inline Error TranslateError(int p_error, bool p_errno) {
 #ifdef _WIN32
   switch (p_error) {
-    case WSAEINTR:
-      return EInterrupted;
-    case WSAEACCES:
-      return EAccessDenied;
-    case WSAEFAULT:
-    case WSAEINVAL:
-      return EInvalidParameter;
-    case WSAEMFILE:
-      return ENoSocketsAvailable;
-    case WSAEWOULDBLOCK:
-      return EOperationWouldBlock;
-    case WSAEINPROGRESS:
-    case WSAEALREADY:
-      return EInProgress;
-    case WSAENOTSOCK:
-      return EInvalidSocket;
-    case WSAEDESTADDRREQ:
-      return EAddressRequired;
-    case WSAEMSGSIZE:
-      return EMessageTooLong;
-    case WSAEPROTOTYPE:
-      return EProtocolNotSupportedBySocket;
-    case WSAENOPROTOOPT:
-      return EBadProtocolOption;
-    case WSAEPROTONOSUPPORT:
-      return EProtocolNotSupported;
-    case WSAESOCKTNOSUPPORT:
-      return EInvalidSocketType;
-    case WSAEOPNOTSUPP:
-      return EOperationNotSupported;
-    case WSAEPFNOSUPPORT:
-      return EProtocolFamilyNotSupported;
-    case WSAEAFNOSUPPORT:
-      return EAddressFamilyNotSupported;
-    case WSAEADDRINUSE:
-      return EAddressInUse;
-    case WSAEADDRNOTAVAIL:
-      return EAddressNotAvailable;
-    case WSAENETDOWN:
-      return ENetworkDown;
-    case WSAENETUNREACH:
-      return ENetworkUnreachable;
-    case WSAENETRESET:
-      return ENetworkReset;
-    case WSAECONNABORTED:
-      return EConnectionAborted;
-    case WSAECONNRESET:
-      return EConnectionReset;
-    case WSAENOBUFS:
-      return ENoMemory;
-    case WSAEISCONN:
-      return EAlreadyConnected;
-    case WSAENOTCONN:
-      return ENotConnected;
-    case WSAESHUTDOWN:
-      return EShutDown;
-    case WSAETIMEDOUT:
-      return ETimedOut;
-    case WSAECONNREFUSED:
-      return EConnectionRefused;
-    case WSAEHOSTDOWN:
-      return EHostDown;
-    case WSAEHOSTUNREACH:
-      return EHostUnreachable;
-    case WSAHOST_NOT_FOUND:
-      return EDNSNotFound;
-    case WSATRY_AGAIN:
-      return EDNSError;
-    case WSANO_DATA:
-      return ENoDNSData;
-    default:
-      return ESeriousError;
+  case WSAEINTR:
+    return EInterrupted;
+  case WSAEACCES:
+    return EAccessDenied;
+  case WSAEFAULT:
+  case WSAEINVAL:
+    return EInvalidParameter;
+  case WSAEMFILE:
+    return ENoSocketsAvailable;
+  case WSAEWOULDBLOCK:
+    return EOperationWouldBlock;
+  case WSAEINPROGRESS:
+  case WSAEALREADY:
+    return EInProgress;
+  case WSAENOTSOCK:
+    return EInvalidSocket;
+  case WSAEDESTADDRREQ:
+    return EAddressRequired;
+  case WSAEMSGSIZE:
+    return EMessageTooLong;
+  case WSAEPROTOTYPE:
+    return EProtocolNotSupportedBySocket;
+  case WSAENOPROTOOPT:
+    return EBadProtocolOption;
+  case WSAEPROTONOSUPPORT:
+    return EProtocolNotSupported;
+  case WSAESOCKTNOSUPPORT:
+    return EInvalidSocketType;
+  case WSAEOPNOTSUPP:
+    return EOperationNotSupported;
+  case WSAEPFNOSUPPORT:
+    return EProtocolFamilyNotSupported;
+  case WSAEAFNOSUPPORT:
+    return EAddressFamilyNotSupported;
+  case WSAEADDRINUSE:
+    return EAddressInUse;
+  case WSAEADDRNOTAVAIL:
+    return EAddressNotAvailable;
+  case WSAENETDOWN:
+    return ENetworkDown;
+  case WSAENETUNREACH:
+    return ENetworkUnreachable;
+  case WSAENETRESET:
+    return ENetworkReset;
+  case WSAECONNABORTED:
+    return EConnectionAborted;
+  case WSAECONNRESET:
+    return EConnectionReset;
+  case WSAENOBUFS:
+    return ENoMemory;
+  case WSAEISCONN:
+    return EAlreadyConnected;
+  case WSAENOTCONN:
+    return ENotConnected;
+  case WSAESHUTDOWN:
+    return EShutDown;
+  case WSAETIMEDOUT:
+    return ETimedOut;
+  case WSAECONNREFUSED:
+    return EConnectionRefused;
+  case WSAEHOSTDOWN:
+    return EHostDown;
+  case WSAEHOSTUNREACH:
+    return EHostUnreachable;
+  case WSAHOST_NOT_FOUND:
+    return EDNSNotFound;
+  case WSATRY_AGAIN:
+    return EDNSError;
+  case WSANO_DATA:
+    return ENoDNSData;
+  default:
+    return ESeriousError;
   }
 #else
   // for the linux version, we need to check if we're using errno
@@ -202,83 +202,83 @@ inline Error TranslateError(int p_error, bool p_errno) {
   // different switch statements.
   if (p_errno == true) {
     switch (p_error) {
-      case EINTR:
-        return EInterrupted;
-      case EACCES:
-        return EAccessDenied;
-      case EFAULT:
-      case EINVAL:
-        return EInvalidParameter;
-      case EMFILE:
-        return ENoSocketsAvailable;
-      case EWOULDBLOCK:
-        return EOperationWouldBlock;
-      case EINPROGRESS:
-      case EALREADY:
-        return EInProgress;
-      case ENOTSOCK:
-        return EInvalidSocket;
-      case EDESTADDRREQ:
-        return EAddressRequired;
-      case EMSGSIZE:
-        return EMessageTooLong;
-      case EPROTOTYPE:
-        return EProtocolNotSupportedBySocket;
-      case ENOPROTOOPT:
-        return EBadProtocolOption;
-      case EPROTONOSUPPORT:
-        return EProtocolNotSupported;
-      case ESOCKTNOSUPPORT:
-        return EInvalidSocketType;
-      case EOPNOTSUPP:
-        return EOperationNotSupported;
-      case EPFNOSUPPORT:
-        return EProtocolFamilyNotSupported;
-      case EAFNOSUPPORT:
-        return EAddressFamilyNotSupported;
-      case EADDRINUSE:
-        return EAddressInUse;
-      case EADDRNOTAVAIL:
-        return EAddressNotAvailable;
-      case ENETDOWN:
-        return ENetworkDown;
-      case ENETUNREACH:
-        return ENetworkUnreachable;
-      case ENETRESET:
-        return ENetworkReset;
-      case ECONNABORTED:
-        return EConnectionAborted;
-      case ECONNRESET:
-        return EConnectionReset;
-      case ENOBUFS:
-        return ENoMemory;
-      case EISCONN:
-        return EAlreadyConnected;
-      case ENOTCONN:
-        return ENotConnected;
-      case ESHUTDOWN:
-        return EShutDown;
-      case ETIMEDOUT:
-        return ETimedOut;
-      case ECONNREFUSED:
-        return EConnectionRefused;
-      case EHOSTDOWN:
-        return EHostDown;
-      case EHOSTUNREACH:
-        return EHostUnreachable;
-      default:
-        return ESeriousError;
+    case EINTR:
+      return EInterrupted;
+    case EACCES:
+      return EAccessDenied;
+    case EFAULT:
+    case EINVAL:
+      return EInvalidParameter;
+    case EMFILE:
+      return ENoSocketsAvailable;
+    case EWOULDBLOCK:
+      return EOperationWouldBlock;
+    case EINPROGRESS:
+    case EALREADY:
+      return EInProgress;
+    case ENOTSOCK:
+      return EInvalidSocket;
+    case EDESTADDRREQ:
+      return EAddressRequired;
+    case EMSGSIZE:
+      return EMessageTooLong;
+    case EPROTOTYPE:
+      return EProtocolNotSupportedBySocket;
+    case ENOPROTOOPT:
+      return EBadProtocolOption;
+    case EPROTONOSUPPORT:
+      return EProtocolNotSupported;
+    case ESOCKTNOSUPPORT:
+      return EInvalidSocketType;
+    case EOPNOTSUPP:
+      return EOperationNotSupported;
+    case EPFNOSUPPORT:
+      return EProtocolFamilyNotSupported;
+    case EAFNOSUPPORT:
+      return EAddressFamilyNotSupported;
+    case EADDRINUSE:
+      return EAddressInUse;
+    case EADDRNOTAVAIL:
+      return EAddressNotAvailable;
+    case ENETDOWN:
+      return ENetworkDown;
+    case ENETUNREACH:
+      return ENetworkUnreachable;
+    case ENETRESET:
+      return ENetworkReset;
+    case ECONNABORTED:
+      return EConnectionAborted;
+    case ECONNRESET:
+      return EConnectionReset;
+    case ENOBUFS:
+      return ENoMemory;
+    case EISCONN:
+      return EAlreadyConnected;
+    case ENOTCONN:
+      return ENotConnected;
+    case ESHUTDOWN:
+      return EShutDown;
+    case ETIMEDOUT:
+      return ETimedOut;
+    case ECONNREFUSED:
+      return EConnectionRefused;
+    case EHOSTDOWN:
+      return EHostDown;
+    case EHOSTUNREACH:
+      return EHostUnreachable;
+    default:
+      return ESeriousError;
     }
   } else {
     switch (p_error) {
-      case HOST_NOT_FOUND:
-        return EDNSNotFound;
-      case TRY_AGAIN:
-        return EDNSError;
-      case NO_DATA:
-        return ENoDNSData;
-      default:
-        return ESeriousError;
+    case HOST_NOT_FOUND:
+      return EDNSNotFound;
+    case TRY_AGAIN:
+      return EDNSError;
+    case NO_DATA:
+      return ENoDNSData;
+    default:
+      return ESeriousError;
     }
   }
 #endif
@@ -307,7 +307,7 @@ inline Error GetError(bool p_errno = true) {
 //              an optional text string describing the error in more detail
 // ========================================================================
 class Exception : public std::exception {
- public:
+public:
   // ====================================================================
   // Function:    Exception
   // Purpose:     To initialize the socket exception with a specific
@@ -331,84 +331,104 @@ class Exception : public std::exception {
   // Function:    PrintError
   // Purpose:     Print the error message to a string
   // ====================================================================
-  const char* PrintError() {
+  const char *PrintError() {
     switch (m_code) {
-      case EOperationWouldBlock:
-        return "Nonblocking socket operation would have blocked";
-      case EInProgress:
-        return "This operation is already in progress";
-      case EInvalidSocket:
-        return "The socket was not valid";
-      case EAddressRequired:
-        return "A destination address is required";
-      case EMessageTooLong:
-        return "The message was too long";
-      case EProtocolNotSupported:
-        return "The protocol is not supported";
-      case EProtocolNotSupportedBySocket:
-        return "The socket type is not supported";
-      case EOperationNotSupported:
-        return "The operation is not supported";
-      case EProtocolFamilyNotSupported:
-        return "The protocol family is not supported";
-      case EAddressFamilyNotSupported:
-        return "The operation is not supported by the address family";
-      case EAddressInUse:
-        return "The address is already in use";
-      case EAddressNotAvailable:
-        return "The address is not available to use";
-      case ENetworkDown:
-        return "The network is down";
-      case ENetworkUnreachable:
-        return "The destination network is unreachable";
-      case ENetworkReset:
-        return "The network connection has been reset";
-      case EConnectionAborted:
-        return "The network connection has been aborted due to software error";
-      case EConnectionReset:
-        return "Connection has been closed by the other side";
-      case ENoMemory:
-        return "There was insufficient system memory to complete the operation";
-      case EAlreadyConnected:
-        return "The socket is already connected";
-      case ENotConnected:
-        return "The socket is not connected";
-      case EShutDown:
-        return "The socket has already been shut down";
-      case ETimedOut:
-        return "The connection timed out";
-      case EConnectionRefused:
-        return "The connection was refused";
-      case EHostDown:
-        return "The host is down";
-      case EHostUnreachable:
-        return "The host is unreachable";
-      case EDNSNotFound:
-        return "DNS lookup is not found";
-      case EDNSError:
-        return "Host not found due to error; try again";
-      case ENoDNSData:
-        return "Address found, but has no valid data";
-      case EInterrupted:
-        return "Operation was interrupted";
-      case ENoSocketsAvailable:
-        return "No more sockets available";
-      case EInvalidParameter:
-        return "Operation has an invalid parameter";
-      case EInvalidSocketType:
-        return "Socket type is invalid";
-      case EAccessDenied:
-        return "Access to this operation was denied";
-      case ESocketLimitReached:
-        return "The manager has reached its maximum number of sockets";
-      default:
-        return "undefined or serious error";
+    case EOperationWouldBlock:
+      return "Nonblocking socket operation would have blocked";
+    case EInProgress:
+      return "This operation is already in progress";
+    case EInvalidSocket:
+      return "The socket was not valid";
+    case EAddressRequired:
+      return "A destination address is required";
+    case EMessageTooLong:
+      return "The message was too long";
+    case EProtocolNotSupported:
+      return "The protocol is not supported";
+    case EProtocolNotSupportedBySocket:
+      return "The socket type is not supported";
+    case EOperationNotSupported:
+      return "The operation is not supported";
+    case EProtocolFamilyNotSupported:
+      return "The protocol family is not supported";
+    case EAddressFamilyNotSupported:
+      return "The operation is not supported by the address family";
+    case EAddressInUse:
+      return "The address is already in use";
+    case EAddressNotAvailable:
+      return "The address is not available to use";
+    case ENetworkDown:
+      return "The network is down";
+    case ENetworkUnreachable:
+      return "The destination network is unreachable";
+    case ENetworkReset:
+      return "The network connection has been reset";
+    case EConnectionAborted:
+      return "The network connection has been aborted due to software error";
+    case EConnectionReset:
+      return "Connection has been closed by the other side";
+    case ENoMemory:
+      return "There was insufficient system memory to complete the operation";
+    case EAlreadyConnected:
+      return "The socket is already connected";
+    case ENotConnected:
+      return "The socket is not connected";
+    case EShutDown:
+      return "The socket has already been shut down";
+    case ETimedOut:
+      return "The connection timed out";
+    case EConnectionRefused:
+      return "The connection was refused";
+    case EHostDown:
+      return "The host is down";
+    case EHostUnreachable:
+      return "The host is unreachable";
+    case EDNSNotFound:
+      return "DNS lookup is not found";
+    case EDNSError:
+      return "Host not found due to error; try again";
+    case ENoDNSData:
+      return "Address found, but has no valid data";
+    case EInterrupted:
+      return "Operation was interrupted";
+    case ENoSocketsAvailable:
+      return "No more sockets available";
+    case EInvalidParameter:
+      return "Operation has an invalid parameter";
+    case EInvalidSocketType:
+      return "Socket type is invalid";
+    case EAccessDenied:
+      return "Access to this operation was denied";
+    case ESocketLimitReached:
+      return "The manager has reached its maximum number of sockets";
+    default:
+      return "undefined or serious error";
     }
   }
 
- protected:
+protected:
   Error m_code;
 };
+
+#ifdef _WIN32
+class WSInit {
+public:
+  WSInit() {
+    WSADATA wsaData;
+    if (WSAStartup(0x0002, &wsaData) == 0)
+      is_valid_ = true;
+  }
+
+  ~WSInit() {
+    if (is_valid_)
+      WSACleanup();
+  }
+
+  bool is_valid_ = false;
+};
+
+static WSInit wstup_;
+#endif
 
 // ========================================================================
 // Class:       Socket
@@ -417,7 +437,14 @@ class Exception : public std::exception {
 //              else.
 // ========================================================================
 class Socket {
- public:
+public:
+  int Create() {
+    if (m_sock == INVALID_SOCKET) {
+      m_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    }
+    return m_sock;
+  }
+
   // ====================================================================
   // Function:    GetSock
   // Purpose:     this function returns the internal API socket
@@ -425,30 +452,28 @@ class Socket {
   //              to interface directly with the BSD Sockets or Winsock
   //              libraries.
   // ====================================================================
-  inline sock GetSock() const { return m_sock; }
+  socket_t GetSock() const { return m_sock; }
 
   // ====================================================================
   // Function:    GetLocalPort
   // Purpose:     gets the local port of the socket
   // ====================================================================
-  inline port GetLocalPort() const { return ntohs(m_localinfo.sin_port); }
+  port GetLocalPort() const { return ntohs(m_localinfo.sin_port); }
 
   // ====================================================================
   // Function:    GetLocalAddress
   // Purpose:     gets the local address of the socket
   // ====================================================================
-  inline ipaddress GetLocalAddress() const {
-    return m_localinfo.sin_addr.s_addr;
-  }
+  ipaddress GetLocalAddress() const { return m_localinfo.sin_addr.s_addr; }
 
   // ====================================================================
   // Function:    Close
   // Purpose:     closes the socket.
   // ====================================================================
   void Close() {
-    // WinSock uses "closesocket" instead of "close", since it treats
-    // sockets as completely separate objects to files, whereas unix
-    // treats files and sockets exactly the same.
+// WinSock uses "closesocket" instead of "close", since it treats
+// sockets as completely separate objects to files, whereas unix
+// treats files and sockets exactly the same.
 #ifdef _WIN32
     closesocket(m_sock);
 #else
@@ -488,7 +513,7 @@ class Socket {
     m_isblocking = p_blockmode;
   }
 
- protected:
+protected:
   // ====================================================================
   // Function:    Socket
   // Purpose:     hidden constructor, meant to prevent people from
@@ -496,22 +521,22 @@ class Socket {
   //              implementations of this class instead, such as
   //              Server and Conn.
   // ====================================================================
-  Socket(sock p_socket = -1);
+  Socket(socket_t p_socket = -1);
 
-  sock m_sock;  // this is the underlying representation
-                // of the actual socket.
+  socket_t m_sock; // this is the underlying representation
+                   // of the actual socket.
 
-  struct sockaddr_in m_localinfo;  // structure containing information
-                                   // about the local connection
+  struct sockaddr_in m_localinfo; // structure containing information
+                                  // about the local connection
 
-  bool m_isblocking;  // this tells whether the socket is
-                      // blocking or not.
+  bool m_isblocking; // this tells whether the socket is
+                     // blocking or not.
 };
 
-inline Socket::Socket(sock p_socket) : m_sock(p_socket) {
-  if (p_socket != -1) {
+inline Socket::Socket(socket_t p_socket) : m_sock(p_socket) {
+  if (p_socket != INVALID_SOCKET) {
     socklen_t s = sizeof(m_localinfo);
-    getsockname(p_socket, (sockaddr*)(&m_localinfo), &s);
+    getsockname(p_socket, (sockaddr *)(&m_localinfo), &s);
   }
 
   // the socket is blocking by default
@@ -524,32 +549,30 @@ inline Socket::Socket(sock p_socket) : m_sock(p_socket) {
 //              TCP/IP data connections.
 // ========================================================================
 class Conn : public Socket {
- public:
+public:
   // ====================================================================
   // Function:    Conn
   // Purpose:     Constructs the data socket with optional values
   // ====================================================================
-  Conn(sock p_socket = -1);
+  Conn(socket_t p_socket = INVALID_SOCKET);
 
   // ====================================================================
   // Function:    GetRemoteAddress
   // Purpose:     get the IP address of the remote host.
   // ====================================================================
-  inline ipaddress GetRemoteAddress() const {
-    return m_remoteinfo.sin_addr.s_addr;
-  }
+  ipaddress GetRemoteAddress() const { return m_remoteinfo.sin_addr.s_addr; }
 
   // ====================================================================
   // Function:    GetRemotePort
   // Purpose:     gets the remote port of the socket
   // ====================================================================
-  inline port GetRemotePort() const { return ntohs(m_remoteinfo.sin_port); }
+  port GetRemotePort() const { return ntohs(m_remoteinfo.sin_port); }
 
   // ====================================================================
   // Function:    IsConnected
   // Purpose:     Determines if the socket is connected or not.
   // ====================================================================
-  inline bool IsConnected() const { return m_connected; }
+  bool IsConnected() const { return m_connected; }
 
   // ====================================================================
   // Function:    Connect
@@ -557,21 +580,21 @@ class Conn : public Socket {
   //              if the socket is already connected, or the server
   //              rejects the connection.
   // ====================================================================
-  void Connect(ipaddress p_addr, port p_port);
+  void Dial(const char *p_addr, port p_port);
 
   // ====================================================================
   // Function:    Send
   // Purpose:     Attempts to send data, and returns the number of
   //              of bytes sent
   // ====================================================================
-  int Send(const char* p_buffer, int p_size);
+  int Write(const char *p_buffer, int p_size);
 
   // ====================================================================
   // Function:    Receive
   // Purpose:     Attempts to receive data from a socket, and returns the
   //              amount of data received.
   // ====================================================================
-  int Receive(char* p_buffer, int p_size);
+  int Read(char *p_buffer, int p_size);
 
   // ====================================================================
   // Function:    Close
@@ -579,17 +602,17 @@ class Conn : public Socket {
   // ====================================================================
   void Close();
 
- protected:
-  bool m_connected;  // is the socket connected?
+protected:
+  bool m_connected; // is the socket connected?
 
-  struct sockaddr_in m_remoteinfo;  // structure containing information
-                                    // about the remote connection
+  struct sockaddr_in m_remoteinfo; // structure containing information
+                                   // about the remote connection
 };
 
-inline Conn::Conn(sock p_socket) : Socket(p_socket), m_connected(false) {
-  if (p_socket != -1) {
+inline Conn::Conn(socket_t p_socket) : Socket(p_socket), m_connected(false) {
+  if (p_socket != INVALID_SOCKET) {
     socklen_t s = sizeof(m_remoteinfo);
-    getpeername(p_socket, (sockaddr*)(&m_remoteinfo), &s);
+    getpeername(p_socket, (sockaddr *)(&m_remoteinfo), &s);
     m_connected = true;
   }
 }
@@ -599,7 +622,7 @@ inline Conn::Conn(sock p_socket) : Socket(p_socket), m_connected(false) {
 //              if the socket is already connected, or the server
 //              rejects the connection.
 // ====================================================================
-inline void Conn::Connect(ipaddress p_addr, port p_port) {
+inline void Conn::Dial(const char *p_addr, port p_port) {
   int err;
 
   // if the socket is already connected...
@@ -609,24 +632,20 @@ inline void Conn::Connect(ipaddress p_addr, port p_port) {
 
   // first try to obtain a socket descriptor from the OS, if
   // there isn't already one.
-  if (m_sock == -1) {
-    m_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-    // throw an exception if the socket could not be created
-    if (m_sock == -1) {
-      throw Exception(GetError());
-    }
+  Socket::Create();
+  // throw an exception if the socket could not be created
+  if (m_sock == INVALID_SOCKET) {
+    throw Exception(GetError());
   }
-
   // set up the socket address structure
   m_remoteinfo.sin_family = AF_INET;
   m_remoteinfo.sin_port = htons(p_port);
-  m_remoteinfo.sin_addr.s_addr = p_addr;
+  m_remoteinfo.sin_addr.s_addr = inet_addr(p_addr);
   memset(&(m_remoteinfo.sin_zero), 0, 8);
 
   // now the socket is created, so connect it.
   socklen_t s = sizeof(struct sockaddr);
-  err = connect(m_sock, (struct sockaddr*)(&m_remoteinfo), s);
+  err = connect(m_sock, (struct sockaddr *)(&m_remoteinfo), s);
   if (err == -1) {
     throw Exception(GetError());
   }
@@ -634,7 +653,7 @@ inline void Conn::Connect(ipaddress p_addr, port p_port) {
   m_connected = true;
 
   // to get the local port, you need to do a little more work
-  err = getsockname(m_sock, (struct sockaddr*)(&m_localinfo), &s);
+  err = getsockname(m_sock, (struct sockaddr *)(&m_localinfo), &s);
   if (err != 0) {
     throw Exception(GetError());
   }
@@ -645,7 +664,7 @@ inline void Conn::Connect(ipaddress p_addr, port p_port) {
 // Purpose:     Attempts to send data, and returns the number of
 //              of bytes sent
 // ====================================================================
-inline int Conn::Send(const char* p_buffer, int p_size) {
+inline int Conn::Write(const char *p_buffer, int p_size) {
   int err;
 
   // make sure the socket is connected first.
@@ -676,7 +695,7 @@ inline int Conn::Send(const char* p_buffer, int p_size) {
 // Purpose:     Attempts to recieve data from a socket, and returns the
 //              amount of data received.
 // ====================================================================
-inline int Conn::Receive(char* p_buffer, int p_size) {
+inline int Conn::Read(char *p_buffer, int p_size) {
   int err;
 
   // make sure the socket is connected first.
@@ -718,7 +737,7 @@ inline void Conn::Close() {
 //              incomming TCP/IP connection requests.
 // ========================================================================
 class Server : public Socket {
- public:
+public:
   // ====================================================================
   // Function:    Server
   // Purpose:     Constructor. Constructs the socket with initial values
@@ -740,13 +759,12 @@ class Server : public Socket {
   //              about the new connection.
   // ====================================================================
   Conn Accept() {
-    sock s;
     struct sockaddr_in socketaddress;
 
     // try to accept a connection
     socklen_t size = sizeof(struct sockaddr);
-    s = accept(m_sock, (struct sockaddr*)&socketaddress, &size);
-    if (s == -1) {
+    socket_t s = accept(m_sock, (struct sockaddr *)&socketaddress, &size);
+    if (s == INVALID_SOCKET) {
       throw Exception(GetError());
     }
 
@@ -758,7 +776,7 @@ class Server : public Socket {
   // Function:    IsListening
   // Purpose:     Determines if the socket is listening or not.
   // ====================================================================
-  inline bool IsListening() const { return m_listening; }
+  bool IsListening() const { return m_listening; }
 
   // ====================================================================
   // Function:    Close
@@ -772,8 +790,8 @@ class Server : public Socket {
     m_listening = false;
   }
 
- protected:
-  bool m_listening;  // is the socket listening?
+protected:
+  bool m_listening; // is the socket listening?
 };
 
 // ====================================================================
@@ -787,19 +805,16 @@ inline void Server::Listen(port p_port) {
 
   // first try to obtain a socket descriptor from the OS, if
   // there isn't already one.
-  if (m_sock == -1) {
-    m_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-    // throw an exception if the socket could not be created
-    if (m_sock == -1) {
-      throw Exception(GetError());
-    }
+  Socket::Create();
+  // throw an exception if the socket could not be created
+  if (m_sock == INVALID_SOCKET) {
+    throw Exception(GetError());
   }
 
   // set the SO_REUSEADDR option on the socket, so that it doesn't
   // hog the port after it closes.
   int reuse = 1;
-  err = setsockopt(m_sock, SOL_SOCKET, SO_REUSEADDR, (char*)(&reuse),
+  err = setsockopt(m_sock, SOL_SOCKET, SO_REUSEADDR, (char *)(&reuse),
                    sizeof(reuse));
   if (err != 0) {
     throw Exception(GetError());
@@ -812,7 +827,7 @@ inline void Server::Listen(port p_port) {
   memset(&(m_localinfo.sin_zero), 0, 8);
 
   // bind the socket
-  err = bind(m_sock, (struct sockaddr*)&m_localinfo, sizeof(struct sockaddr));
+  err = bind(m_sock, (struct sockaddr *)&m_localinfo, sizeof(struct sockaddr));
   if (err == -1) {
     throw Exception(GetError());
   }
@@ -828,4 +843,4 @@ inline void Server::Listen(port p_port) {
   m_listening = true;
 }
 
-}  // end namespace SocketLib
+} // namespace Net
