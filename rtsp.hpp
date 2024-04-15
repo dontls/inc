@@ -13,6 +13,7 @@
 
 #ifdef AUTHORIZAION
 #include "crypto/md5.h"
+#include "crypto/base64.h"
 #endif
 
 namespace librtsp {
@@ -41,8 +42,8 @@ typedef struct {
   std::string realm;
   std::string nonce;
   bool Parse(const char *s);
-  void BaseAuth(std::string s);
-  std::string Auth(std::string type);
+  void SetAuth(std::string s);
+  std::string GetAuth(std::string type);
 } url;
 
 inline bool url::Parse(const char *uri) {
@@ -87,21 +88,25 @@ inline bool url::Parse(const char *uri) {
 // nonce="000001EB000026E9", uri="rtsp://172.16.60.219:554/test.mp4",
 // response="382675796381e60b0d7fedf5812ce42d"
 
-inline void url::BaseAuth(std::string s) {
-  realm = getItemVar(s, "realm=\"", "\"");
-  nonce = getItemVar(s, "nonce=\"", "\"");
-  if (s.find("Digest") != std::string::npos) {
+inline void url::SetAuth(std::string s) {
+  if (s.find("Basic") != std::string::npos) {
+    baseAuth = "Authorization: Basic ";
+  } else {
+    realm = getItemVar(s, "realm=\"", "\"");
+    nonce = getItemVar(s, "nonce=\"", "\"");
     baseAuth = "Authorization: Digest ";
+    baseAuth += ("username=\"" + user);
+    baseAuth += ("\", realm=\"" + realm);
+    baseAuth += ("\", nonce=\"" + nonce);
+    baseAuth += ("\", uri=\"" + path + "\"");
   }
-  baseAuth += ("username=\"" + user);
-  baseAuth += ("\", realm=\"" + realm);
-  baseAuth += ("\", nonce=\"" + nonce);
-  baseAuth += ("\", uri=\"" + path + "\"");
 }
 
-inline std::string url::Auth(std::string type) {
+inline std::string url::GetAuth(std::string type) {
 #ifdef AUTHORIZAION
-  if (!baseAuth.empty()) {
+  if (baseAuth.find("Basic") != std::string::npos) {
+    return baseAuth + base64_encode(user + ":" + password);
+  } else {
     std::string hex = md5::md5_hash_hex(user + ":" + realm + ":" + password);
     hex += (":" + nonce + ":" + md5::md5_hash_hex(type + ":" + this->path));
     return baseAuth + (", response=\"" + md5::md5_hash_hex(hex) + "\"\r\n");
@@ -344,8 +349,8 @@ static long timeUnix() {
 class client {
 private:
   Net::Conn conn_;
-  BytesBuffer recvbuf_;
   BytesBuffer rbuf_;
+  BytesBuffer dbuf_;
   int cmdType_;
   int seq_ = 0;
   sdp sdp_;
@@ -369,10 +374,10 @@ public:
       for (;;) {
         char buf[PKG_LEN] = {0};
         int n = conn_.Read(buf, PKG_LEN);
-        recvbuf_.Write(buf, n);
+        rbuf_.Write(buf, n);
         for (;;) {
-          uint8_t *b = (uint8_t *)recvbuf_.Bytes();
-          int blen = recvbuf_.Len() - 4;
+          uint8_t *b = (uint8_t *)rbuf_.Bytes();
+          int blen = rbuf_.Len() - 4;
           if (blen < 0) {
             break;
           }
@@ -384,13 +389,13 @@ public:
             }
             // printf("rtsp channel %d len %d\n", ch, dlen - 12);
             rtp_.Unmarshal(b + 4, dlen);
-            uint8_t code = decode_(&rtp_, rbuf_);
+            uint8_t code = decode_(&rtp_, dbuf_);
             if (code & 0x40) {
               // on_data((uint8_t *)rbuf_.Bytes(), rbuf_.Len());
-              printf("%ld\n", rbuf_.Len());
-              rbuf_.Reset(0);
+              printf("%ld\n", dbuf_.Len());
+              dbuf_.Reset(0);
             }
-            recvbuf_.Remove(dlen + 4);
+            rbuf_.Remove(dlen + 4);
           } else {
             // GET_PARAMETER response
             doRtspParse((char *)b);
@@ -399,7 +404,7 @@ public:
         if (timeUnix() - ts > 50) {
           ts = timeUnix();
           doWriteCmd(GET_PARAMETER, sUrl, seq_, sdp_.session.c_str(),
-                     url_.Auth("GET_PARAMETER").c_str());
+                     url_.GetAuth("GET_PARAMETER").c_str());
         }
       }
     } catch (Net::Exception &e) {
@@ -434,13 +439,15 @@ private:
           });
       if (it == content.end()) {
         doWriteCmd(DESCRIBE, url_.path.c_str(), seq_++,
-                   url_.Auth("DESCRIBE").c_str());
+                   url_.GetAuth("DESCRIBE").c_str());
       } else {
-        url_.BaseAuth(it->c_str());
+        url_.SetAuth(it->c_str());
         doWriteCmd(OPTIONS, url_.path.c_str(), seq_++,
-                   url_.Auth("OPTIONS").c_str());
+                   url_.GetAuth("OPTIONS").c_str());
       }
-    } break;
+      rbuf_.Reset(0);
+      return;
+    };
     case DESCRIBE: {
       sdp_.Parse(content);
       this->decode_ = std::bind(&Unmarshal264, std::placeholders::_1,
@@ -449,18 +456,19 @@ private:
         this->decode_ = std::bind(&Unmarshal265, std::placeholders::_1,
                                   std::placeholders::_2);
       }
-      recvbuf_.Reset(0);
+      rbuf_.Reset(0);
       doWriteCmd(SETUP, url_.path.c_str(), sdp_.control[0].id.c_str(), seq_++,
-                 sdp_.session.c_str(), url_.Auth("SETUP").c_str());
+                 sdp_.session.c_str(), url_.GetAuth("SETUP").c_str());
       return;
     };
     case SETUP:
       // TODO 音频时等待音频SETUP
       doWriteCmd(PLAY, url_.path.c_str(), seq_++, sdp_.session.c_str(),
-                 url_.Auth("PLAY").c_str());
-      break;
+                 url_.GetAuth("PLAY").c_str());
+      rbuf_.Reset(0);
+      return;
     }
-    recvbuf_.Remove(pos);
+    rbuf_.Remove(pos);
   }
 };
 
