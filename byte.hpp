@@ -10,7 +10,7 @@ typedef unsigned int u32;
 typedef long long s64;
 typedef unsigned long long u64;
 
-namespace Bytes {
+namespace libyte {
 
 inline u8 *AppendU8(u8 *dest, u8 n) {
   dest[0] = n;
@@ -123,7 +123,7 @@ inline u64 BeU64(u8 *b, s32 &i) {
   return r;
 }
 
-} // namespace Bytes
+} // namespace libyte
 
 #define GETVAR_8(p)                                                            \
   ({                                                                           \

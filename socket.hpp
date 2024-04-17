@@ -29,7 +29,7 @@ typedef int socklen_t;
 
 #include <exception>
 #include <string.h>
-namespace Net {
+namespace libnet {
 // ========================================================================
 //  Globals and Typedefs
 // ========================================================================
@@ -843,4 +843,4 @@ inline void Server::Listen(port p_port) {
   m_listening = true;
 }
 
-} // namespace Net
+} // namespace libnet

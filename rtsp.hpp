@@ -193,7 +193,7 @@ inline void rtp::Unmarshal(uint8_t *b, int len) {
   this->size = len - 12;
 }
 
-inline uint8_t Unmarshal264(rtp *r, BytesBuffer &b) {
+inline uint8_t Unmarshal264(rtp *r, libyte::Buffer &b) {
   uint8_t sflag = 0;
   if (r->payloadType != 96) {
     return sflag;
@@ -222,7 +222,7 @@ inline uint8_t Unmarshal264(rtp *r, BytesBuffer &b) {
 }
 
 // NOTE. sps/vps/pps没有和i帧合并
-inline uint8_t Unmarshal265(rtp *r, BytesBuffer &b) {
+inline uint8_t Unmarshal265(rtp *r, libyte::Buffer &b) {
   uint8_t sflag = 0;
   if (r->payloadType != 96) {
     return sflag;
@@ -346,21 +346,21 @@ static long timeUnix() {
 
 #define PKG_LEN 2048
 
-class client {
+class Client {
 private:
-  Net::Conn conn_;
-  BytesBuffer rbuf_;
-  BytesBuffer dbuf_;
+  libnet::Conn conn_;
+  libyte::Buffer rbuf_;
+  libyte::Buffer dbuf_;
   int cmdType_;
   int seq_ = 0;
   sdp sdp_;
   url url_;
   rtp rtp_;
-  std::function<uint8_t(rtp *, BytesBuffer &)> decode_;
+  std::function<uint8_t(rtp *, libyte::Buffer &)> decode_;
 
 public:
-  client(/* args */) {}
-  ~client() { conn_.Close(); }
+  Client(/* args */) {}
+  ~Client() { conn_.Close(); }
 
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl) {
@@ -407,7 +407,7 @@ public:
                      url_.GetAuth("GET_PARAMETER").c_str());
         }
       }
-    } catch (Net::Exception &e) {
+    } catch (libnet::Exception &e) {
       printf("%s\n", e.PrintError());
     }
     return true;

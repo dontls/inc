@@ -5,7 +5,7 @@
 #include <vector>
 #include <sstream>
 
-namespace String {
+namespace libstring {
 inline std::vector<std::string> Split(const std::string &s,
                                       const std::string &c) {
   std::vector<std::string> v;

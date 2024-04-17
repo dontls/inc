@@ -1,17 +1,22 @@
-#ifndef __COMM_LOCK_H__
-#define __COMM_LOCK_H__
+#pragma once
 
 #include <pthread.h>
 
-class CLock {
+namespace libthread {
+
+class Lock {
 public:
-  void Lock() { pthread_mutex_lock(&_lock); }
-  void UnLock() { pthread_mutex_unlock(&_lock); }
-  CLock() { pthread_mutex_init(&_lock, NULL); }
-  ~CLock() { pthread_mutex_destroy(&_lock); }
+  Lock() {
+    pthread_mutex_init(&lock_, NULL);
+    pthread_mutex_lock(&lock_);
+  }
+  ~Lock() {
+    pthread_mutex_unlock(&lock_);
+    pthread_mutex_destroy(&lock_);
+  }
 
 private:
-  pthread_mutex_t _lock;
+  pthread_mutex_t lock_;
 };
 
-#endif
+} // namespace libthread

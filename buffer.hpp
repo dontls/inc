@@ -1,5 +1,4 @@
-#ifndef BytesBuffer_H
-#define BytesBuffer_H
+#pragma once
 
 #include <assert.h>
 #include <stddef.h>
@@ -9,7 +8,8 @@
 #include <mutex>
 #include <string>
 
-class BytesBuffer {
+namespace libyte {
+class Buffer {
 private:
   std::mutex lock_;
   char *ptr_;
@@ -17,15 +17,15 @@ private:
   size_t offset_;
 
 public:
-  BytesBuffer() : offset_(0) {
+  Buffer() : offset_(0) {
     total_ = 2048;
     ptr_ = new char[total_];
   }
-  BytesBuffer(size_t n) : offset_(0) {
+  Buffer(size_t n) : offset_(0) {
     total_ = n;
     ptr_ = new char[total_];
   }
-  ~BytesBuffer() {
+  ~Buffer() {
     if (ptr_) {
       delete[] ptr_;
       ptr_ = NULL;
@@ -50,7 +50,7 @@ public:
   size_t WriteByte(char c) { return Write(&c, 1); }
 
   // 写入Buffer
-  size_t Write(BytesBuffer *b) { return Write(b->Bytes(), b->Len()); }
+  size_t Write(Buffer *b) { return Write(b->Bytes(), b->Len()); }
 
   // 写入字符串
   size_t WriteString(std::string &s) {
@@ -117,4 +117,4 @@ private:
   }
 };
 
-#endif
+} // namespace libytes

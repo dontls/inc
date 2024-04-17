@@ -17,15 +17,17 @@
  * T为队列元素类型
  * 因为有std::mutex和std::condition_variable类成员，所以此类型不支持复制构造函数也不支持赋值操作(=)
  */
-template <typename T> class CQueue {
+
+namespace libthread {
+template <typename T> class Queue {
 private:
   mutable std::mutex mtx;
   mutable std::condition_variable cv;
   using queue_type = std::queue<T>;
   queue_type data;
-  CQueue() = default;
-  CQueue(const CQueue &) = delete;
-  CQueue &operator=(const CQueue &) = delete;
+  Queue() = default;
+  Queue(const Queue &) = delete;
+  Queue &operator=(const Queue &) = delete;
 
 public:
   using value_type = typename queue_type::value_type;
@@ -37,20 +39,20 @@ public:
    * @return:
    */
   template <typename _inputiterator>
-  CQueue(_inputiterator first, _inputiterator last) {
+  Queue(_inputiterator first, _inputiterator last) {
     for (auto itr = first; itr != last; ++itr) {
       data.push(*itr);
     }
   }
-  explicit CQueue(const container_type &c) : data(c) {}
+  explicit Queue(const container_type &c) : data(c) {}
 
   /**
    * @description: 使用初始化列表为参数的构造函数
    * @param {type}
    * @return:
    */
-  CQueue(std::initializer_list<value_type> list)
-      : CQueue(list.begin(), list.end()) {}
+  Queue(std::initializer_list<value_type> list)
+      : Queue(list.begin(), list.end()) {}
 
   /**
    * @description: 将元素加入队列
@@ -110,3 +112,4 @@ public:
     return data.size();
   }
 };
+} // namespace libthread

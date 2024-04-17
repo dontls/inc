@@ -1,17 +1,18 @@
-#ifndef __TIMER_H__
-#define __TIMER_H__
+#pragma once
 
 #include <functional>
 #include <thread>
 
-class CTimer {
+namespace libtime {
+
+class Timer {
 private:
   /* data */
   bool m_bClear = false;
 
 public:
-  CTimer(/* args */) {}
-  ~CTimer() {}
+  Timer(/* args */) {}
+  ~Timer() {}
 
   // void func(){}
   // Timer timer;
@@ -54,4 +55,4 @@ public:
   // 停止定时
   void Stop() { this->m_bClear = true; }
 };
-#endif
+} // namespace libtime

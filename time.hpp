@@ -1,6 +1,5 @@
 // 封装的time函数
-#ifndef __TIME_H__
-#define __TIME_H__
+#pragma once
 
 #include <string>
 #include <iomanip>
@@ -8,7 +7,7 @@
 #include <sstream>
 #include <sys/time.h>
 
-namespace Time {
+namespace libtime {
 
 // 格式化时间
 inline std::string Format(unsigned int _t = 0) {
@@ -47,6 +46,4 @@ inline long long UnixMilli() {
 inline bool Since(long long tb, long long mills) {
   return (tb + mills) < UnixMilli();
 }
-} // namespace Time
-
-#endif
+} // namespace libtime
