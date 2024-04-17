@@ -20,18 +20,18 @@
 #include <string>
 #include <endian.h>
 
-#define MP4_FOURCC(a, b, c, d) \
+#define MP4_FOURCC(a, b, c, d)                                                 \
   (((a) << 0) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 
 #define htobe32_sizeof(x) htobe32(sizeof(x))
 
 #define log_printf printf
 
-namespace mp4 {
+namespace libmp4 {
 
 namespace box {
 
-static void set_matrix(uint32_t* matrix) {
+static void set_matrix(uint32_t *matrix) {
   // mvhd_matrix[1] = htonl(65536);
   // matrix[3] = htonl(-65536);
   // matrix[6] = htonl(0x03840000);
@@ -62,7 +62,7 @@ inline std::string ftyp::Marshal() {
   compat1 = MP4_FOURCC('i', 's', 'o', 'm');
   compat2 = MP4_FOURCC('i', 's', 'o', '2');
   compat4 = MP4_FOURCC('m', 'p', '4', '1');
-  return std::string((char*)this, sizeof(ftyp));
+  return std::string((char *)this, sizeof(ftyp));
 }
 
 struct Avcc {
@@ -75,10 +75,10 @@ struct Avcc {
   uint8_t nalulen;
   uint8_t sps_num;
   uint16_t sps_len;
-  uint8_t* sps;
+  uint8_t *sps;
   uint8_t pps_num;
   uint16_t pps_len;
-  uint8_t* pps;
+  uint8_t *pps;
 };
 
 struct Hvcc {
@@ -112,7 +112,7 @@ struct stsd {
   uint8_t flags[3];
   uint32_t entry_count;
   struct {
-    uint32_t size;  // ahvc1 <- avc1 & hvc1
+    uint32_t size; // ahvc1 <- avc1 & hvc1
     uint32_t type;
     uint8_t reserved1[6];
     uint16_t data_refidx;
@@ -129,11 +129,11 @@ struct stsd {
     uint16_t depth;
     uint16_t predefined;
   } avc1;
-  std::string Marshal(std::string& sps, std::string& pps);
-  std::string Marshal(std::string& sps, std::string& pps, std::string vps);
+  std::string Marshal(std::string &sps, std::string &pps);
+  std::string Marshal(std::string &sps, std::string &pps, std::string vps);
 };
 
-inline std::string stsd::Marshal(std::string& sps, std::string& pps) {
+inline std::string stsd::Marshal(std::string &sps, std::string &pps) {
   uint32_t spslen = sps.length(), ppslen = pps.length();
   type = MP4_FOURCC('s', 't', 's', 'd');
   entry_count = htobe32(1);
@@ -148,7 +148,7 @@ inline std::string stsd::Marshal(std::string& sps, std::string& pps) {
   avc1.predefined = 0xFFFF;
   uint8_t buf[128] = {0};
   // 附加avcc信息
-  Avcc* avc = (Avcc*)(buf);
+  Avcc *avc = (Avcc *)(buf);
   avc->type = MP4_FOURCC('a', 'v', 'c', 'C');
   avc->config_ver = 1;
   avc->avc_profile = spslen > 1 ? sps[1] : 0;
@@ -170,13 +170,13 @@ inline std::string stsd::Marshal(std::string& sps, std::string& pps) {
   avc->size = htobe32(i);
   avc1.size = htobe32(i + sizeof(avc1));
   size = htobe32(i + sizeof(stsd));
-  std::string s1((char*)this, sizeof(stsd));
-  s1.append(std::string((char*)buf, i));
+  std::string s1((char *)this, sizeof(stsd));
+  s1.append(std::string((char *)buf, i));
   log_printf("stsd size = %lu\n", s1.length());
   return s1;
 }
 
-inline std::string stsd::Marshal(std::string& sps, std::string& pps,
+inline std::string stsd::Marshal(std::string &sps, std::string &pps,
                                  std::string vps) {
   type = MP4_FOURCC('s', 't', 's', 'd');
   entry_count = htobe32(1);
@@ -190,7 +190,7 @@ inline std::string stsd::Marshal(std::string& sps, std::string& pps,
   avc1.depth = uint16_t(htobe32(24) >> 16);
   avc1.predefined = 0xFFFF;
   uint8_t buf[254] = {0};
-  Hvcc* hvc = (Hvcc*)(buf);
+  Hvcc *hvc = (Hvcc *)(buf);
   hvc->type = MP4_FOURCC('h', 'v', 'c', 'C');
   hvc->configurationVersion = 1;
   // hvc->general_profile_space= 0;
@@ -241,23 +241,23 @@ inline std::string stsd::Marshal(std::string& sps, std::string& pps,
   hvc->size = htobe32(i);
   avc1.size = htobe32(i + sizeof(avc1));
   size = htobe32(i + sizeof(stsd));
-  std::string s1((char*)this, sizeof(stsd));
-  s1.append(std::string((char*)buf, i));
+  std::string s1((char *)this, sizeof(stsd));
+  s1.append(std::string((char *)buf, i));
   return s1;
 }
 
 class stValue {
- private:
-  uint32_t* value_;
+private:
+  uint32_t *value_;
   uint32_t total_;
   uint32_t offi_;
 
- private:
+private:
   void Realloc(uint32_t n) {
-    value_ = (uint32_t*)realloc(value_, n * sizeof(uint32_t));
+    value_ = (uint32_t *)realloc(value_, n * sizeof(uint32_t));
   }
 
- public:
+public:
   stValue() : total_(0), offi_(0) {}
   ~stValue() {
     if (value_) {
@@ -272,11 +272,11 @@ class stValue {
     }
     value_[offi_++] = v;
   }
-  void AppendTo(std::string& out) {
+  void AppendTo(std::string &out) {
     for (uint32_t i = 0; i < offi_; i++) {
       value_[i] = htobe32(value_[i]);
     }
-    out.append((char*)value_, offi_ * sizeof(uint32_t));
+    out.append((char *)value_, offi_ * sizeof(uint32_t));
   }
   uint32_t Count() { return offi_; }
   uint32_t Length() { return offi_ * sizeof(uint32_t); }
@@ -289,14 +289,14 @@ struct stts {
   uint8_t version;
   uint8_t flags[3];
   uint32_t count;
-  void append(std::string& out, stValue& v);
+  void append(std::string &out, stValue &v);
 };
 
-inline void stts::append(std::string& out, stValue& v) {
+inline void stts::append(std::string &out, stValue &v) {
   size = htobe32(sizeof(stts) + v.Length());
   type = MP4_FOURCC('s', 't', 't', 's');
   count = htobe32(v.Count() / 2);
-  out.append(std::string((char*)this, sizeof(stts)));
+  out.append(std::string((char *)this, sizeof(stts)));
   v.AppendTo(out);
   log_printf("stts size = %u\n", be32toh(size));
 }
@@ -308,14 +308,14 @@ struct stss {
   uint8_t version;
   uint8_t flags[3];
   uint32_t count;
-  void append(std::string& out, stValue& v);
+  void append(std::string &out, stValue &v);
 };
 
-inline void stss::append(std::string& out, stValue& v) {
+inline void stss::append(std::string &out, stValue &v) {
   size = htobe32(sizeof(stss) + v.Length());
   type = MP4_FOURCC('s', 't', 's', 's');
   count = htobe32(v.Count());
-  out.append(std::string((char*)this, sizeof(stss)));
+  out.append(std::string((char *)this, sizeof(stss)));
   v.AppendTo(out);
   log_printf("stss size = %u\n", be32toh(size));
 }
@@ -329,17 +329,17 @@ struct stsc {
   uint32_t first_chunk;
   uint32_t samp_per_chunk;
   uint32_t samp_desc_id;
-  void append(std::string& out);
+  void append(std::string &out);
 };
 
-inline void stsc::append(std::string& out) {
+inline void stsc::append(std::string &out) {
   size = htobe32_sizeof(stsc);
   type = MP4_FOURCC('s', 't', 's', 'c');
   count = htobe32(1);
   first_chunk = htobe32(1);
   samp_per_chunk = htobe32(1);
   samp_desc_id = htobe32(1);
-  out.append(std::string((char*)this, sizeof(stsc)));
+  out.append(std::string((char *)this, sizeof(stsc)));
   log_printf("stsc size = %u\n", be32toh(size));
 }
 
@@ -351,14 +351,14 @@ struct stsz {
   uint8_t flags[3];
   uint32_t sample_size;
   uint32_t count;
-  void append(std::string& out, stValue& v);
+  void append(std::string &out, stValue &v);
 };
 
-inline void stsz::append(std::string& out, stValue& v) {
+inline void stsz::append(std::string &out, stValue &v) {
   size = htobe32(sizeof(stsz) + v.Length());
   type = MP4_FOURCC('s', 't', 's', 'z');
   count = htobe32(v.Count());
-  out.append(std::string((char*)this, sizeof(stsz)));
+  out.append(std::string((char *)this, sizeof(stsz)));
   v.AppendTo(out);
   log_printf("stsz size = %u\n", be32toh(size));
 }
@@ -370,14 +370,14 @@ struct stco {
   uint8_t version;
   uint8_t flags[3];
   uint32_t count;
-  void append(std::string& out, stValue& v);
+  void append(std::string &out, stValue &v);
 };
 
-inline void stco::append(std::string& out, stValue& v) {
+inline void stco::append(std::string &out, stValue &v) {
   size = htobe32(sizeof(stco) + v.Length());
   type = MP4_FOURCC('s', 't', 'c', 'o');
   count = htobe32(v.Count());
-  out.append(std::string((char*)this, sizeof(stco)));
+  out.append(std::string((char *)this, sizeof(stco)));
   v.AppendTo(out);
   log_printf("stco size = %u\n", be32toh(size));
 }
@@ -394,10 +394,10 @@ struct stbl {
   box::stsz stsz;
   box::stValue stcov;
   box::stco stco;
-  std::string& to_string();
+  std::string &to_string();
 };
 
-inline std::string& stbl::to_string() {
+inline std::string &stbl::to_string() {
   stts.append(str, sttsv);
   stss.append(str, stssv);
   stsc.append(str);
@@ -504,8 +504,8 @@ inline void trak::Marshal(uint32_t length) {
   tkhd.flags[2] = 0xF;
   tkhd.trackid = htobe32(1);
   set_matrix(tkhd.matrix);
-  tkhd.width = htobe32(tkhd.width << 16);    //
-  tkhd.height = htobe32(tkhd.height << 16);  //
+  tkhd.width = htobe32(tkhd.width << 16);   //
+  tkhd.height = htobe32(tkhd.height << 16); //
 
   // mdhd
   mdia.mdhd.size = htobe32_sizeof(mdia.mdhd);
@@ -515,7 +515,7 @@ inline void trak::Marshal(uint32_t length) {
   mdia.hdlr.size = htobe32_sizeof(mdia.hdlr);
   mdia.hdlr.type = MP4_FOURCC('h', 'd', 'l', 'r');
   mdia.hdlr.handler_type = MP4_FOURCC('v', 'i', 'd', 'e');
-  ::strcpy((char*)mdia.hdlr.name, "VideoHandler");
+  ::strcpy((char *)mdia.hdlr.name, "VideoHandler");
 
   mdia.minf.vmhd.size = htobe32_sizeof(mdia.minf.vmhd);
   mdia.minf.vmhd.type = MP4_FOURCC('v', 'm', 'h', 'd');
@@ -618,8 +618,8 @@ struct mdat {
   uint32_t type;
 };
 
-}  // namespace box
+} // namespace box
 
 #pragma pack()
 
-}  // namespace mp4
+} // namespace libmp4
