@@ -103,15 +103,16 @@ inline void url::SetAuth(std::string s) {
 }
 
 inline std::string url::GetAuth(std::string type) {
+  if (!baseAuth.empty()) {
 #ifdef AUTHORIZAION
-  if (baseAuth.find("Basic") != std::string::npos) {
-    return baseAuth + base64_encode(user + ":" + password);
-  } else {
+    if (baseAuth.find("Basic") != std::string::npos) {
+      return baseAuth + base64_encode(user + ":" + password);
+    }
     std::string hex = md5::md5_hash_hex(user + ":" + realm + ":" + password);
     hex += (":" + nonce + ":" + md5::md5_hash_hex(type + ":" + this->path));
     return baseAuth + (", response=\"" + md5::md5_hash_hex(hex) + "\"\r\n");
-  }
 #endif
+  }
   return "";
 }
 
@@ -346,9 +347,8 @@ static long timeUnix() {
 
 #define PKG_LEN 2048
 
-class Client {
+class Client : libnet::Conn {
 private:
-  libnet::Conn conn_;
   libyte::Buffer rbuf_;
   libyte::Buffer dbuf_;
   int cmdType_;
@@ -360,7 +360,7 @@ private:
 
 public:
   Client(/* args */) {}
-  ~Client() { conn_.Close(); }
+  ~Client() { Close(); }
 
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl) {
@@ -368,12 +368,12 @@ public:
       return false;
     }
     try {
-      conn_.Dial(url_.ip.c_str(), url_.port);
+      Dial(url_.ip.c_str(), url_.port);
       doWriteCmd(OPTIONS, sUrl, seq_++, "");
       long ts = timeUnix();
       for (;;) {
         char buf[PKG_LEN] = {0};
-        int n = conn_.Read(buf, PKG_LEN);
+        int n = Read(buf, PKG_LEN);
         rbuf_.Write(buf, n);
         for (;;) {
           uint8_t *b = (uint8_t *)rbuf_.Bytes();
@@ -418,7 +418,7 @@ private:
     char buf[PKG_LEN] = {0};
     sprintf(buf, Format(type), args...);
     printf("\nwrite --> \n%s", buf);
-    conn_.Write(buf, strlen(buf));
+    Write(buf, strlen(buf));
     cmdType_ = type;
   }
 
