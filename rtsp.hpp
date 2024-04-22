@@ -9,9 +9,9 @@
 #include <vector>
 #include <functional>
 
-#define AUTHORIZAION
+#define AUTHORIZAION 1
 
-#ifdef AUTHORIZAION
+#if AUTHORIZAION
 #include "crypto/md5.h"
 #include "crypto/base64.h"
 #endif
@@ -32,7 +32,7 @@ inline std::string getItemVar(std::string &str, const char *s, const char *e) {
 }
 
 // rtsp url解析
-typedef struct {
+struct url {
   std::string path;
   std::string user;
   std::string password;
@@ -44,7 +44,7 @@ typedef struct {
   bool Parse(const char *s);
   void SetAuth(std::string s);
   std::string GetAuth(std::string type);
-} url;
+};
 
 inline bool url::Parse(const char *uri) {
   baseAuth = "";
@@ -116,7 +116,7 @@ inline std::string url::GetAuth(std::string type) {
   return "";
 }
 
-typedef struct {
+struct sdp {
   std::string session;
   struct {
     int format; // 96 /98
@@ -125,7 +125,7 @@ typedef struct {
     std::string id;
   } control[2];
   void Parse(std::vector<std::string> &ss);
-} sdp;
+};
 
 inline void sdp::Parse(std::vector<std::string> &ss) {
   int i = 0;
@@ -158,7 +158,7 @@ inline uint32_t GetUint32(uint8_t *b) {
 
 static char nalu[] = {0x00, 0x00, 0x00, 0x01};
 
-typedef struct {
+struct rtp {
   /* byte 0 */
   uint8_t csrcLen : 4;
   uint8_t extension : 1;
@@ -178,7 +178,7 @@ typedef struct {
   // payload size
   int size;
   void Unmarshal(uint8_t *b, int len);
-} rtp;
+};
 
 inline void rtp::Unmarshal(uint8_t *b, int len) {
   this->csrcLen = b[0] >> 4;

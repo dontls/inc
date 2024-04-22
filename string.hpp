@@ -38,6 +38,6 @@ inline uint32_t SplitToBit(const char *str, const char flag) {
   }
   return ret;
 }
-} // namespace String
+} // namespace libstring
 
 #endif

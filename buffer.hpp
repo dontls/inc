@@ -48,7 +48,12 @@ public:
 
   // 写入单个字节
   size_t WriteByte(char c) { return Write(&c, 1); }
-
+  //
+  size_t WriteUint16(uint16_t n) { return Write((char *)&n, 2); }
+  //
+  size_t WriteUint32(uint32_t n) { return Write((char *)&n, 4); }
+  //
+  size_t WriteUint64(uint64_t n) { return Write((char *)&n, 8); }
   // 写入Buffer
   size_t Write(Buffer *b) { return Write(b->Bytes(), b->Len()); }
 
@@ -117,4 +122,4 @@ private:
   }
 };
 
-} // namespace libytes
+} // namespace libyte
