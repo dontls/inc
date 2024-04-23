@@ -4,6 +4,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <vector>
+
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
 
 typedef unsigned int UINT;
 typedef unsigned char BYTE;
@@ -175,8 +181,8 @@ enum {
   NALU_TYPE_UNSPECIFIED_63,
   NALU_TYPE_INVALID,
 };
-inline int decode_sps(BYTE *buf, unsigned int nLen, int &width, int &height,
-                      int &fps) {
+inline int decode_sps(BYTE *buf, unsigned int nLen, uint16_t &width,
+                      uint16_t &height, int &fps) {
   if (nLen < 20) {
     return false;
   }
@@ -263,8 +269,8 @@ enum {
   NALU_TYPE_FILL = 12,
 };
 
-inline int decode_sps(BYTE *buf, unsigned int nLen, int &width, int &height,
-                      int &fps) {
+inline int decode_sps(BYTE *buf, unsigned int nLen, uint16_t &width,
+                      uint16_t &height, int &fps) {
   UINT StartBit = 0;
   fps = 0;
   de_emulation_prevention(buf, &nLen);
@@ -387,16 +393,13 @@ struct nalu {
   int type;
   int size;
   char *data;
-  char *parse(char *data, int &length);
 };
 
 // 返回下个nalu开始的位置，length剩余数据长度
-inline char *nalu::parse(char *data, int &length) {
+inline char *naluparse(char *data, size_t &length, std::vector<nalu> &nalus) {
   if (length <= 0) {
-    this->size = 0;
     return nullptr;
   }
-
   char *ptr = data;
   int i = 7;
   for (; i < length; i++) {
@@ -405,14 +408,15 @@ inline char *nalu::parse(char *data, int &length) {
       break;
     }
   }
-  this->data = ptr;
-  this->type = ptr[4];
   // 最后一个
-  if (i == length)
-    this->size = length;
-  else
-    this->size = i - 3;
-
-  length -= this->size;
-  return ptr + this->size;
+  if (i == length) {
+    return ptr;
+  }
+  nalu u;
+  u.data = ptr;
+  u.type = ptr[4];
+  u.size = i - 3;
+  nalus.push_back(u);
+  length -= u.size;
+  return naluparse(ptr + u.size, length, nalus);
 } // namespace nalu

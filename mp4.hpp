@@ -1,18 +1,9 @@
-
-/**
- * @file mp4box.hpp
- * @author your name (you@domain.com)
- * @brief
- * @version 0.1
- * @date 2024-01-30
- *
- * @copyright Copyright (c) 2024
- *
- */
 #pragma once
 
 #include "sps.hpp"
-
+#include <cstddef>
+#include <string.h>
+#include <vector>
 #include <stdint.h>
 #include <time.h>
 #include <string.h>
@@ -25,7 +16,7 @@
 
 #define htobe32_sizeof(x) htobe32(sizeof(x))
 
-#define log_printf printf
+#define Debug printf
 
 namespace libmp4 {
 
@@ -65,7 +56,7 @@ inline std::string ftyp::Marshal() {
   return std::string((char *)this, sizeof(ftyp));
 }
 
-struct Avcc {
+struct avcc {
   uint32_t size;
   uint32_t type;
   uint8_t config_ver;
@@ -81,7 +72,7 @@ struct Avcc {
   uint8_t *pps;
 };
 
-struct Hvcc {
+struct hvcc {
   uint32_t size;
   uint32_t type;
   uint8_t configurationVersion;
@@ -148,14 +139,14 @@ inline std::string stsd::Marshal(std::string &sps, std::string &pps) {
   avc1.predefined = 0xFFFF;
   uint8_t buf[128] = {0};
   // 附加avcc信息
-  Avcc *avc = (Avcc *)(buf);
+  avcc *avc = (avcc *)(buf);
   avc->type = MP4_FOURCC('a', 'v', 'c', 'C');
   avc->config_ver = 1;
   avc->avc_profile = spslen > 1 ? sps[1] : 0;
   avc->profile_compat = spslen > 2 ? sps[2] : 0;
   avc->avc_level = spslen > 3 ? sps[3] : 0;
   avc->nalulen = 0xFF;
-  int i = offsetof(Avcc, sps_num);
+  int i = offsetof(avcc, sps_num);
   buf[i++] = (0x7 << 5) | (1 << 0);
   buf[i++] = (spslen << 8) & 0xff;
   buf[i++] = spslen & 0xff;
@@ -172,7 +163,7 @@ inline std::string stsd::Marshal(std::string &sps, std::string &pps) {
   size = htobe32(i + sizeof(stsd));
   std::string s1((char *)this, sizeof(stsd));
   s1.append(std::string((char *)buf, i));
-  log_printf("stsd size = %lu\n", s1.length());
+  Debug("stsd size = %lu\n", s1.length());
   return s1;
 }
 
@@ -190,7 +181,7 @@ inline std::string stsd::Marshal(std::string &sps, std::string &pps,
   avc1.depth = uint16_t(htobe32(24) >> 16);
   avc1.predefined = 0xFFFF;
   uint8_t buf[254] = {0};
-  Hvcc *hvc = (Hvcc *)(buf);
+  hvcc *hvc = (hvcc *)(buf);
   hvc->type = MP4_FOURCC('h', 'v', 'c', 'C');
   hvc->configurationVersion = 1;
   // hvc->general_profile_space= 0;
@@ -212,7 +203,7 @@ inline std::string stsd::Marshal(std::string &sps, std::string &pps,
   hvc->temporalIdNested = 1;
   hvc->lengthSizeMinusOne = 3;
   hvc->numOfArrays = 3;
-  int i = sizeof(Hvcc);
+  int i = sizeof(hvcc);
   uint32_t spslen = sps.length(), ppslen = pps.length(), vpslen = vps.length();
   buf[i++] = 32;
   buf[i++] = 0x00;
@@ -298,7 +289,7 @@ inline void stts::append(std::string &out, stValue &v) {
   count = htobe32(v.Count() / 2);
   out.append(std::string((char *)this, sizeof(stts)));
   v.AppendTo(out);
-  log_printf("stts size = %u\n", be32toh(size));
+  Debug("stts size = %u\n", be32toh(size));
 }
 
 // sample_numbers
@@ -317,7 +308,7 @@ inline void stss::append(std::string &out, stValue &v) {
   count = htobe32(v.Count());
   out.append(std::string((char *)this, sizeof(stss)));
   v.AppendTo(out);
-  log_printf("stss size = %u\n", be32toh(size));
+  Debug("stss size = %u\n", be32toh(size));
 }
 
 struct stsc {
@@ -340,7 +331,7 @@ inline void stsc::append(std::string &out) {
   samp_per_chunk = htobe32(1);
   samp_desc_id = htobe32(1);
   out.append(std::string((char *)this, sizeof(stsc)));
-  log_printf("stsc size = %u\n", be32toh(size));
+  Debug("stsc size = %u\n", be32toh(size));
 }
 
 // sample_sizes
@@ -360,7 +351,7 @@ inline void stsz::append(std::string &out, stValue &v) {
   count = htobe32(v.Count());
   out.append(std::string((char *)this, sizeof(stsz)));
   v.AppendTo(out);
-  log_printf("stsz size = %u\n", be32toh(size));
+  Debug("stsz size = %u\n", be32toh(size));
 }
 
 // chunk_offsets
@@ -379,7 +370,7 @@ inline void stco::append(std::string &out, stValue &v) {
   count = htobe32(v.Count());
   out.append(std::string((char *)this, sizeof(stco)));
   v.AppendTo(out);
-  log_printf("stco size = %u\n", be32toh(size));
+  Debug("stco size = %u\n", be32toh(size));
 }
 
 struct stbl {
@@ -394,10 +385,10 @@ struct stbl {
   box::stsz stsz;
   box::stValue stcov;
   box::stco stco;
-  std::string &to_string();
+  std::string &ToString();
 };
 
-inline std::string &stbl::to_string() {
+inline std::string &stbl::ToString() {
   stts.append(str, sttsv);
   stss.append(str, stssv);
   stsc.append(str);
@@ -535,21 +526,21 @@ inline void trak::Marshal(uint32_t length) {
   // minf
   mdia.minf.size = htobe32(sizeof(mdia.minf) + length);
   mdia.minf.type = MP4_FOURCC('m', 'i', 'n', 'f');
-  log_printf("minf size = %u\n", be32toh(mdia.minf.size));
+  Debug("minf size = %u\n", be32toh(mdia.minf.size));
 
   // mdia
   mdia.size = htobe32(sizeof(mdia) + length);
   mdia.type = MP4_FOURCC('m', 'd', 'i', 'a');
-  log_printf("mdia size = %u\n", be32toh(mdia.size));
+  Debug("mdia size = %u\n", be32toh(mdia.size));
 
   // stbl
   mdia.minf.stbl.size = htobe32(sizeof(mdia.minf.stbl) + length);
   mdia.minf.stbl.type = MP4_FOURCC('s', 't', 'b', 'l');
-  log_printf("stbl size = %u\n", be32toh(mdia.minf.stbl.size));
+  Debug("stbl size = %u\n", be32toh(mdia.minf.stbl.size));
 
   size = htobe32(sizeof(trak) + length);
   type = MP4_FOURCC('t', 'r', 'a', 'k');
-  log_printf("trak size = %u\n", be32toh(size));
+  Debug("trak size = %u\n", be32toh(size));
 }
 
 struct moov {
@@ -617,9 +608,156 @@ struct mdat {
   uint32_t size;
   uint32_t type;
 };
-
+#pragma pack()
 } // namespace box
 
-#pragma pack()
+// mp4
+// ftyp+mdat(size+type,size+data,size+data...)+moov
+// fmp4
+// ftyp+moov+(moof+mdat,moof+mdat,....)
 
+class Box {
+private:
+  int64_t firts_;
+  int64_t lsts_;
+  uint32_t count_;
+  uint32_t mdatoff_;
+  box::ftyp typ_;
+  box::moov moov_;
+  box::stbl stbl_;
+
+public:
+  Box() : firts_(0), lsts_(0), count_(0), mdatoff_(sizeof(box::ftyp) + 8) {}
+  ~Box() {}
+  std::string SyncFtyp(std::vector<nalu> &nalus);
+  void FillVideoStbl(uint32_t size, int64_t ts, bool iskey);
+  std::string MdatHeader();
+  std::string MoovData();
+};
+
+/**
+ * @brief
+ *
+ * @param nalus
+ * @return std::string
+ */
+inline std::string Box::SyncFtyp(std::vector<nalu> &nalus) {
+  BYTE *ptr = (BYTE *)nalus[0].data + 4;
+  int len = nalus[0].size - 4;
+  int fps_ = 0;
+  box::trak &trakv = moov_.trakv;
+  std::string sps = std::string(nalus[0].data + 4, nalus[0].size - 4);
+  std::string pps = std::string(nalus[1].data + 4, nalus[1].size - 4);
+  if (ptr[0] == 0x67) {
+    typ_.compat3 = MP4_FOURCC('a', 'v', 'c', '1');
+    avc::decode_sps(ptr, len, stbl_.stsd.avc1.width, stbl_.stsd.avc1.height,
+                    fps_);
+    stbl_.str = stbl_.stsd.Marshal(sps, pps);
+  } else {
+    typ_.compat3 = MP4_FOURCC('h', 'v', 'c', '1');
+    hevc::decode_sps(ptr, len, stbl_.stsd.avc1.width, stbl_.stsd.avc1.height,
+                     fps_);
+    std::string vps = std::string(nalus[2].data - 4, nalus[1].size + 4);
+    stbl_.str = stbl_.stsd.Marshal(sps, pps, vps);
+  }
+  return typ_.Marshal();
+}
+
+inline void Box::FillVideoStbl(uint32_t size, int64_t ts, bool iskey) {
+  if (firts_ == 0) {
+    firts_ = ts;
+    lsts_ = ts;
+  }
+  count_++;
+  if (iskey) {
+    stbl_.stssv.Put(count_);
+  }
+  stbl_.sttsv.Put(1);
+  stbl_.sttsv.Put(ts - lsts_);
+  stbl_.stszv.Put(size);
+  stbl_.stcov.Put(mdatoff_);
+  mdatoff_ += size;
+  lsts_ = ts;
+}
+
+inline std::string Box::MdatHeader() {
+  box::mdat dat;
+  dat.size = htobe32(mdatoff_ - sizeof(box::ftyp));
+  dat.type = MP4_FOURCC('m', 'd', 'a', 't');
+  return std::string((char *)&dat, 8);
+}
+
+inline std::string Box::MoovData() {
+  std::string &s1 = stbl_.ToString();
+  uint32_t dur = htobe32(lsts_ - firts_);
+  moov_.mvhd.duration = dur;
+  moov_.trakv.tkhd.duration = dur;
+  moov_.trakv.mdia.mdhd.duration = dur;
+  moov_.trakv.tkhd.width = stbl_.stsd.avc1.width;
+  moov_.trakv.tkhd.height = stbl_.stsd.avc1.height;
+  moov_.Marshal(s1.length());
+  std::string s((char *)&moov_, sizeof(box::moov));
+  s.append(s1);
+  Debug("moov size = %lu\n", s.length());
+  return s;
+}
+
+class Writer {
+private:
+  FILE *file_;
+  Box *box_;
+
+public:
+  Writer(const char *filename) : file_(NULL), box_(NULL) {
+    this->Open(filename);
+  }
+  ~Writer() { this->Close(); }
+  bool Open(const char *filename) {
+    file_ = fopen(filename, "wb+");
+    return file_ != NULL;
+  }
+  void Close();
+  int WriteVideo(int64_t ts, bool iskey, char *data, size_t len);
+
+private:
+  size_t WriteString(std::string s) {
+    return fwrite(s.c_str(), s.length(), 1, file_);
+  }
+};
+
+inline void Writer::Close() {
+  if (file_ == NULL) {
+    return;
+  }
+  if (box_) {
+    WriteString(box_->MoovData());
+    fseek(file_, sizeof(box::ftyp), SEEK_SET);
+    WriteString(box_->MdatHeader());
+    delete box_;
+    box_ = NULL;
+  }
+  fclose(file_);
+  file_ = NULL;
+}
+
+inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
+  if (file_ == NULL) {
+    return -1;
+  }
+  std::vector<nalu> nalus;
+  char *ptr = naluparse(data, len, nalus);
+  if (box_ == NULL && iskey) {
+    box_ = new Box();
+    WriteString(box_->SyncFtyp(nalus));
+    WriteString(box_->MdatHeader());
+  }
+  if (box_ == NULL) {
+    return 0;
+  }
+  box_->FillVideoStbl(len, ts, iskey);
+  uint32_t slen = htobe32(len - 4);
+  fwrite(&slen, sizeof(uint32_t), 1, file_);
+  fwrite(ptr + 4, len - 4, 1, file_);
+  return len;
+}
 } // namespace libmp4
