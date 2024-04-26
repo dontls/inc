@@ -71,7 +71,7 @@ inline DWORD u(UINT BitCount, BYTE *buf, UINT &nStartBit) {
  * @无返回值
  */
 inline void de_emulation_prevention(BYTE *buf, unsigned int *buf_size) {
-  int i = 0, j = 0;
+  unsigned int i = 0, j = 0;
   BYTE *tmp_ptr = NULL;
   unsigned int tmp_buf_size = 0;
   int val = 0;
@@ -401,7 +401,7 @@ inline char *naluparse(char *data, size_t &length, std::vector<nalu> &nalus) {
     return nullptr;
   }
   char *ptr = data;
-  int i = 7;
+  size_t i = 7;
   for (; i < length; i++) {
     if (ptr[i] == 0x01 && ptr[i - 1] == 0x00 && ptr[i - 2] == 0x00 &&
         ptr[i - 3] == 0x00) {
