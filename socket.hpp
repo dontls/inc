@@ -594,7 +594,7 @@ public:
   // Purpose:     Attempts to receive data from a socket, and returns the
   //              amount of data received.
   // ====================================================================
-  int Read(char *p_buffer, int p_size);
+  int Read(char *p_buffer, int p_size, long timeout = 0);
 
   // ====================================================================
   // Function:    Close
@@ -607,6 +607,34 @@ protected:
 
   struct sockaddr_in m_remoteinfo; // structure containing information
                                    // about the remote connection
+
+private:
+  int setReadDealTimeout(long timeout) {
+    if (timeout <= 0) {
+      return 0;
+    }
+    int err = -1;
+    struct timeval tout;
+    tout.tv_sec = timeout / 1000;
+    tout.tv_usec = (timeout % 1000) * 1000;
+    fd_set fdRead;
+    int nSocket = m_sock + 1;
+    while (1) {
+      FD_ZERO(&fdRead);
+      FD_SET(m_sock, &fdRead);
+      int rc = select(nSocket, &fdRead, NULL, NULL, &tout);
+      if (rc == -1) {
+        if (EINTR == errno || EAGAIN == errno) {
+          continue;
+        }
+      }
+      if (FD_ISSET(nSocket, &fdRead)) {
+        err = 0;
+      }
+      break;
+    }
+    return err;
+  }
 };
 
 inline Conn::Conn(socket_t p_socket) : Socket(p_socket), m_connected(false) {
@@ -695,14 +723,17 @@ inline int Conn::Write(const char *p_buffer, int p_size) {
 // Purpose:     Attempts to recieve data from a socket, and returns the
 //              amount of data received.
 // ====================================================================
-inline int Conn::Read(char *p_buffer, int p_size) {
-  int err;
+inline int Conn::Read(char *p_buffer, int p_size, long timeout) {
+  int err = 0;
 
   // make sure the socket is connected first.
   if (m_connected == false) {
     throw Exception(ENotConnected);
   }
 
+  if (setReadDealTimeout(timeout) < 0) {
+    return err;
+  }
   // attempt to recieve the data
   err = recv(m_sock, p_buffer, p_size, 0);
   if (err == 0) {
