@@ -2,6 +2,7 @@
 #include "buffer.hpp"
 #include "socket.hpp"
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <sstream>
 #include <stdio.h>
@@ -9,6 +10,7 @@
 #include <vector>
 #include <functional>
 
+#define DBG printf
 #define AUTHORIZAION 1
 
 #if AUTHORIZAION
@@ -118,25 +120,26 @@ inline std::string url::GetAuth(std::string type) {
 
 struct sdp {
   std::string session;
+  int i;
   struct {
     int format; // 96 /98
     std::string rtpmap;
     std::string sprops;
     std::string id;
-  } control[2];
+  } control[3];
   void Parse(std::vector<std::string> &ss);
 };
 
 inline void sdp::Parse(std::vector<std::string> &ss) {
-  int i = 0;
+  i = -1;
   for (size_t j = 0; j < ss.size(); j++) {
     std::string &s = ss[j];
     size_t pos = s.find("Session: ");
     if (pos != std::string::npos) {
       session = s.substr(9);
-    } else if ((pos = s.find("m=audio")) != std::string::npos) {
-      i = 1;
-    } else {
+    } else if ((pos = s.find("m=")) != std::string::npos) {
+      i++;
+    } else if (i >= 0) {
       if ((pos = s.find("a=rtpmap:")) != std::string::npos) {
         std::istringstream sline(s.c_str() + 9);
         sline >> control[i].format >> control[i].rtpmap;
@@ -194,11 +197,8 @@ inline void rtp::Unmarshal(uint8_t *b, int len) {
   this->size = len - 12;
 }
 
-inline uint8_t Unmarshal264(rtp *r, libyte::Buffer &b) {
+static uint8_t Unmarshal264(rtp *r, libyte::Buffer &b) {
   uint8_t sflag = 0;
-  if (r->payloadType != 96) {
-    return sflag;
-  }
   uint8_t ntype = r->data[1];
   if ((r->data[0] & 0x1f) == 28) {
     sflag = (ntype & 0x80) | (ntype & 0x40);
@@ -223,11 +223,8 @@ inline uint8_t Unmarshal264(rtp *r, libyte::Buffer &b) {
 }
 
 // NOTE. sps/vps/pps没有和i帧合并
-inline uint8_t Unmarshal265(rtp *r, libyte::Buffer &b) {
+static uint8_t Unmarshal265(rtp *r, libyte::Buffer &b) {
   uint8_t sflag = 0;
-  if (r->payloadType != 96) {
-    return sflag;
-  }
   uint8_t flag = r->data[0] >> 1;
   uint8_t ntype = 0;
   if (flag == 49) {
@@ -266,6 +263,7 @@ enum {
   PAUSE,
   ANNOUNCE,
   TEARDOWN,
+  SETAUDIO
 };
 
 inline const char *Format(int type) {
@@ -339,8 +337,8 @@ inline const char *Format(int type) {
   return "";
 }
 
-static long timeUnix() {
-  auto tp = std::chrono::time_point_cast<std::chrono::seconds>(
+static long timeMillUnix() {
+  auto tp = std::chrono::time_point_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now());
   return tp.time_since_epoch().count();
 }
@@ -369,8 +367,8 @@ public:
     }
     try {
       Dial(url_.ip.c_str(), url_.port);
-      doWriteCmd(OPTIONS, sUrl, seq_++, "");
-      long ts = timeUnix();
+      doWriteCmd(OPTIONS, seq_++, "");
+      long ts = timeMillUnix();
       for (;;) {
         char buf[PKG_LEN] = {0};
         int n = Read(buf, PKG_LEN);
@@ -387,12 +385,17 @@ public:
             if (blen < dlen) {
               break;
             }
-            // printf("rtsp channel %d len %d\n", ch, dlen - 12);
             rtp_.Unmarshal(b + 4, dlen);
-            uint8_t code = decode_(&rtp_, dbuf_);
+            uint8_t code = 0x40;
+            if (rtp_.payloadType == 96) {
+              code = decode_(&rtp_, dbuf_);
+            } else if (rtp_.payloadType == 72) {
+              code = 0;
+            } else {
+              dbuf_.Write((char *)rtp_.data, rtp_.size);
+            }
             if (code & 0x40) {
-              // on_data((uint8_t *)rbuf_.Bytes(), rbuf_.Len());
-              printf("%ld\n", dbuf_.Len());
+              DBG("%ld channel %d, %ld\n", timeMillUnix(), ch, dbuf_.Len());
               dbuf_.Reset(0);
             }
             rbuf_.Remove(dlen + 4);
@@ -401,14 +404,14 @@ public:
             doRtspParse((char *)b);
           }
         }
-        if (timeUnix() - ts > 50) {
-          ts = timeUnix();
-          doWriteCmd(GET_PARAMETER, sUrl, seq_, sdp_.session.c_str(),
+        if (timeMillUnix() - ts > 50000) {
+          ts = timeMillUnix();
+          doWriteCmd(GET_PARAMETER, seq_, sdp_.session.c_str(),
                      url_.GetAuth("GET_PARAMETER").c_str());
         }
       }
     } catch (libnet::Exception &e) {
-      printf("%s\n", e.PrintError());
+      DBG("%s\n", e.PrintError());
     }
     return true;
   }
@@ -416,59 +419,62 @@ public:
 private:
   template <class... Args> void doWriteCmd(int type, Args... args) {
     char buf[PKG_LEN] = {0};
-    sprintf(buf, Format(type), args...);
-    printf("\nwrite --> \n%s", buf);
+    sprintf(buf, Format(type), url_.path.c_str(), args...);
+    DBG("\nwrite --> \n%s", buf);
     Write(buf, strlen(buf));
     cmdType_ = type;
   }
 
   void doRtspParse(char *b) {
-    std::vector<std::string> content;
-    std::string body(b);
-    size_t pos = 0, end = 0;
-    while ((end = body.find("\r\n", pos)) != std::string::npos) {
-      content.push_back(body.substr(pos, end - pos));
-      pos = end + 2;
+    std::vector<std::string> res;
+    char *ptr = b, *ptr1 = nullptr;
+    while ((ptr1 = strstr(ptr, "\r\n"))) {
+      res.push_back(std::string(ptr, ptr1 - ptr));
+      ptr = ptr1 + 2;
     }
-    printf("%ld read --> \n%s", pos, b);
+    int len = ptr - b;
+    b[len - 1] = '\0';
+    DBG("%d read --> \n%s", len, b);
     switch (cmdType_) {
     case OPTIONS: {
-      auto it =
-          std::find_if(content.begin(), content.end(), [&](std::string &s) {
-            return s.find("WWW-Authenticate") != std::string::npos;
-          });
-      if (it == content.end()) {
-        doWriteCmd(DESCRIBE, url_.path.c_str(), seq_++,
-                   url_.GetAuth("DESCRIBE").c_str());
+      auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
+        return s.find("WWW-Authenticate") != std::string::npos;
+      });
+      if (it == res.end()) {
+        doWriteCmd(DESCRIBE, seq_++, url_.GetAuth("DESCRIBE").c_str());
       } else {
         url_.SetAuth(it->c_str());
-        doWriteCmd(OPTIONS, url_.path.c_str(), seq_++,
-                   url_.GetAuth("OPTIONS").c_str());
+        doWriteCmd(OPTIONS, seq_++, url_.GetAuth("OPTIONS").c_str());
       }
       rbuf_.Reset(0);
       return;
     };
     case DESCRIBE: {
-      sdp_.Parse(content);
-      this->decode_ = std::bind(&Unmarshal264, std::placeholders::_1,
-                                std::placeholders::_2);
+      sdp_.Parse(res);
+      this->decode_ = Unmarshal264;
       if (sdp_.control[0].rtpmap.find("H265") != std::string::npos) {
-        this->decode_ = std::bind(&Unmarshal265, std::placeholders::_1,
-                                  std::placeholders::_2);
+        this->decode_ = Unmarshal265;
+      }
+      doWriteCmd(SETUP, sdp_.control[0].id.c_str(), seq_++,
+                 sdp_.session.c_str(), url_.GetAuth("SETUP").c_str());
+      if (sdp_.i > 1) {
+        cmdType_ = SETAUDIO;
       }
       rbuf_.Reset(0);
-      doWriteCmd(SETUP, url_.path.c_str(), sdp_.control[0].id.c_str(), seq_++,
-                 sdp_.session.c_str(), url_.GetAuth("SETUP").c_str());
       return;
     };
     case SETUP:
-      // TODO 音频时等待音频SETUP
-      doWriteCmd(PLAY, url_.path.c_str(), seq_++, sdp_.session.c_str(),
+      doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
                  url_.GetAuth("PLAY").c_str());
       rbuf_.Reset(0);
       return;
+    case SETAUDIO:
+      doWriteCmd(SETUP, sdp_.control[1].id.c_str(), seq_++,
+                 sdp_.session.c_str(), url_.GetAuth("SETUP").c_str());
+      rbuf_.Reset(0);
+      return;
     }
-    rbuf_.Remove(pos);
+    rbuf_.Remove(len);
   }
 };
 
