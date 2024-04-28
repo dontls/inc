@@ -406,7 +406,7 @@ public:
         }
         if (timeMillUnix() - ts > 50000) {
           ts = timeMillUnix();
-          doWriteCmd(GET_PARAMETER, seq_, sdp_.session.c_str(),
+          doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
                      url_.GetAuth("GET_PARAMETER").c_str());
         }
       }
