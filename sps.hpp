@@ -409,7 +409,7 @@ inline char *naluparse(char *data, size_t &length, std::vector<nalu> &nalus) {
     }
   }
   // 最后一个
-  if (i == length) {
+  if (i >= length) {
     return ptr;
   }
   nalu u;
