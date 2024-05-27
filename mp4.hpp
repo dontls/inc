@@ -3,13 +3,37 @@
 #include "sps.hpp"
 #include <cstddef>
 #include <string.h>
-#include <vector>
 #include <stdint.h>
 #include <time.h>
 #include <string.h>
 #include <cstdint>
 #include <string>
+
+#ifdef _WIN32
+static uint32_t htobe32(uint32_t v) {
+  uint32_t r = ((v & 0xFF) << 24) | ((v & 0xFF00) << 8) | ((v >> 8) & 0xFF00) |
+               ((v >> 24) & 0xFF);
+
+  return r;
+}
+
+static uint32_t be32toh(uint32_t v) {
+  uint32_t r = ((v & 0xFF) << 24) | ((v & 0xFF00) << 8) | ((v >> 8) & 0xFF00) |
+               ((v >> 24) & 0xFF);
+
+  return r;
+}
+
+static uint32_t htole32(uint32_t v) {
+  uint32_t r = ((v & 0xFF) << 24) | ((v & 0xFF00) << 8) | ((v >> 8) & 0xFF00) |
+               ((v >> 24) & 0xFF);
+
+  return r;
+
+}
+#else
 #include <endian.h>
+#endif
 
 #define MP4_FOURCC(a, b, c, d)                                                 \
   (((a) << 0) | ((b) << 8) | ((c) << 16) | ((d) << 24))

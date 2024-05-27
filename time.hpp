@@ -5,8 +5,11 @@
 #include <iomanip>
 #include <ctime>
 #include <sstream>
+#ifdef _WIN32
+#include <windows.h>
+#include <chrono>
+#else
 #include <sys/time.h>
-#if __linux__
 #include <unistd.h>
 #endif
 
@@ -17,7 +20,7 @@ inline std::string Format(std::time_t t = 0) {
   if (t == 0) {
     t = time(NULL);
   }
-  struct tm timeinfo;
+  struct tm timeinfo = {0};
 #ifdef _WIN32
   localtime_s(&timeinfo, &t);
 #else
@@ -38,8 +41,12 @@ inline std::time_t Format2Unix(const char *str) {
 }
 
 inline long long UnixMilli() {
-#if defined(WIN32) || defined(_WINDOWS)
-  return ::GetTickCount();
+#ifdef _WIN32
+  auto now = std::chrono::system_clock::now();
+  return static_cast<long long>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          now.time_since_epoch())
+          .count());
 #else
   struct timeval tv;
   gettimeofday(&tv, 0);
@@ -56,7 +63,7 @@ inline bool Since(long long tb, long long mills) {
 }
 
 inline void Sleep(unsigned int ms) {
-#if defined(WIN32) || defined(_WINDOWS)
+#ifdef _WIN32
   return ::Sleep(ms);
 #else
   usleep(ms * 1000);
