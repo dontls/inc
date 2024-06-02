@@ -40,27 +40,25 @@ inline std::time_t Format2Unix(const char *str) {
   return ts;
 }
 
-inline long long UnixMilli() {
+inline long UnixMilli() {
 #ifdef _WIN32
   auto now = std::chrono::system_clock::now();
-  return static_cast<long long>(
+  return static_cast<long>(
       std::chrono::duration_cast<std::chrono::milliseconds>(
           now.time_since_epoch())
           .count());
 #else
   struct timeval tv;
   gettimeofday(&tv, 0);
-  long long llRet = tv.tv_sec;
+  long llRet = tv.tv_sec;
   llRet *= 1000;
   llRet += tv.tv_usec / 1000;
   return llRet;
 #endif
 }
 
-// 超时判断
-inline bool Since(long long tb, long long mills) {
-  return (tb + mills) < UnixMilli();
-}
+// 超时
+inline long Since(long long tb) { return UnixMilli() - tb; }
 
 inline void Sleep(unsigned int ms) {
 #ifdef _WIN32
