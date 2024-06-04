@@ -1,12 +1,12 @@
+﻿#pragma once
 // 封装的time函数
-#pragma once
 
 #include <string>
 #include <iomanip>
 #include <ctime>
 #include <sstream>
 #ifdef _WIN32
-#include <windows.h>
+#include <thread>
 #include <chrono>
 #else
 #include <sys/time.h>
@@ -14,7 +14,6 @@
 #endif
 
 namespace libtime {
-
 // 格式化时间
 inline std::string Format(std::time_t t = 0) {
   if (t == 0) {
@@ -34,23 +33,23 @@ inline std::string Format(std::time_t t = 0) {
 inline std::time_t Format2Unix(const char *str) {
   std::tm tm = {};
   std::istringstream ss(str);
-  ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-  long ts = std::mktime(&tm);
-  // ts += tm.tm_gmtoff;
-  return ts;
+  if (ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S")) {
+    return std::mktime(&tm);
+  }
+  return 0;
 }
 
-inline long UnixMilli() {
+inline long long UnixMilli() {
 #ifdef _WIN32
   auto now = std::chrono::system_clock::now();
-  return static_cast<long>(
+  return static_cast<long long>(
       std::chrono::duration_cast<std::chrono::milliseconds>(
           now.time_since_epoch())
           .count());
 #else
   struct timeval tv;
   gettimeofday(&tv, 0);
-  long llRet = tv.tv_sec;
+  long long llRet = tv.tv_sec;
   llRet *= 1000;
   llRet += tv.tv_usec / 1000;
   return llRet;
@@ -58,11 +57,11 @@ inline long UnixMilli() {
 }
 
 // 超时
-inline long Since(long long tb) { return UnixMilli() - tb; }
+inline long long Since(long long tb) { return UnixMilli() - tb; }
 
 inline void Sleep(unsigned int ms) {
 #ifdef _WIN32
-  return ::Sleep(ms);
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 #else
   usleep(ms * 1000);
 #endif
