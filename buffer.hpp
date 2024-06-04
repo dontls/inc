@@ -59,7 +59,7 @@ public:
 
   // 写入字符串
   size_t WriteString(std::string &s) {
-    if (s.length() <= 0) {
+    if (s.length() == 0) {
       return 0;
     }
     return Write((char *)s.c_str(), s.length());
