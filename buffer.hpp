@@ -88,12 +88,12 @@ public:
   void Realloc(size_t n, bool fource = false) {
     std::lock_guard<std::mutex> lock(lock_);
     offset_ = 0;
-    if (fource && total_ < n) {
+    if (fource || total_ < n) {
       total_ = n;
       ptr_ = (char *)realloc(ptr_, total_);
+      assert(ptr_);
     }
     ::memset(ptr_, 0, total_);
-    assert(ptr_);
   }
 
 private:
