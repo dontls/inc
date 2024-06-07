@@ -1,6 +1,5 @@
 #pragma once
 
-#if 1
 #define LogDebug(format, ...)                                                  \
   printf("%s:%d " format " \n", __FILE__, __LINE__, ##__VA_ARGS__)
 
@@ -20,9 +19,3 @@
            ##__VA_ARGS__);                                                     \
   else                                                                         \
     LogDebug(format, ##__VA_ARGS__)
-#else
-#define LogDebug(format, ...)
-#define LogInfo(format, ...)
-#define LogWarn(format, ...)
-#define LogError(format, ...)
-#endif

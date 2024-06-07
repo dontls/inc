@@ -42,42 +42,41 @@ public:
 
   // 写入指定长度
   size_t Write(char *p, size_t n) {
-    assert(NULL != p || 0 > 0);
+    assert(NULL != p || n > 0);
     return tryWriteByRealloc(p, n);
   }
-
+  size_t Write(const char *s) {
+    assert(NULL != s);
+    return tryWriteByRealloc((char *)s, strlen(s));
+  }
   // 写入单个字节
-  size_t WriteByte(char c) { return Write(&c, 1); }
+  size_t Write(char c) { return Write(&c, 1); }
   //
-  size_t WriteU16(uint16_t n) { return Write((char *)&n, 2); }
+  size_t Write(uint16_t n) { return Write((char *)&n, 2); }
   //
-  size_t WriteU32(uint32_t n) { return Write((char *)&n, 4); }
+  size_t Write(uint32_t n) { return Write((char *)&n, 4); }
   //
-  size_t WriteU64(uint64_t n) { return Write((char *)&n, 8); }
+  size_t Write(uint64_t n) { return Write((char *)&n, 8); }
   // 写入Buffer
   size_t Write(Buffer *b) { return Write(b->Bytes(), b->Len()); }
-
   // 写入字符串
-  size_t WriteString(std::string &s) {
+  size_t Write(std::string &s) {
     if (s.length() == 0) {
       return 0;
     }
     return Write((char *)s.c_str(), s.length());
   }
-
   // 读数据
   size_t Read(char *p, size_t n) {
     assert(NULL != p && n > 0);
     return tryRead(p, n);
   }
-
   // 重置
   size_t Reset(size_t offset = 0) {
     offset_ = offset;
     memset(ptr_, 0, total_);
     return offset_;
   }
-
   // 移除数据
   size_t Remove(size_t n) {
     std::lock_guard<std::mutex> lock(lock_);
@@ -86,11 +85,10 @@ public:
     ::memmove(ptr_, ptr_ + s, offset_);
     return s;
   }
-
-  void Realloc(size_t n) {
+  void Realloc(size_t n, bool fource = false) {
     std::lock_guard<std::mutex> lock(lock_);
     offset_ = 0;
-    if (total_ < n) {
+    if (fource && total_ < n) {
       total_ = n;
       ptr_ = (char *)realloc(ptr_, total_);
     }
