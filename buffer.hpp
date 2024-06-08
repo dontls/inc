@@ -85,10 +85,10 @@ public:
     ::memmove(ptr_, ptr_ + s, offset_);
     return s;
   }
-  void Realloc(size_t n, bool fource = false) {
+  void Realloc(size_t n, bool force = false) {
     std::lock_guard<std::mutex> lock(lock_);
     offset_ = 0;
-    if (fource || total_ < n) {
+    if (force || total_ < n) {
       total_ = n;
       ptr_ = (char *)realloc(ptr_, total_);
       assert(ptr_);
