@@ -29,11 +29,10 @@ private:
   FILE *file_;
   std::mutex mtx_;
 
-public:
   template <typename... T>
   void output(FILE *file, int level, const char *filename, int line,
               const char *fmt, T &&...args) {
-    fprintf(file, "%s%s:%d:\x1b[0m ", Colors[level], filename, line);
+    fprintf(file, "%s%s:%d\x1b[0m ", Colors[level], filename, line);
     fprintf(file, fmt, args...);
     fprintf(file, "\n");
     fflush(file);
