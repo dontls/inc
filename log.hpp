@@ -1,5 +1,11 @@
 #pragma once
 
+#ifdef _WIN32
+#include <cstdarg>
+#else
+#include <stdarg.h>
+#endif
+
 #include <cstdio>
 #include <mutex>
 
@@ -29,11 +35,18 @@ private:
   FILE *file_;
   std::mutex mtx_;
 
-  template <typename... T>
-  void output(FILE *file, int level, const char *filename, int line,
-              const char *fmt, T &&...args) {
-    fprintf(file, "%s%s:%d\x1b[0m ", Colors[level], filename, line);
-    fprintf(file, fmt, args...);
+  // template <typename... T>
+  // void foutput(FILE *file, const char *fmt, T &&...args) {
+  //   fprintf(file, fmt, args...);
+  //   fprintf(file, "\n");
+  //   fflush(file);
+  // }
+
+  void foutput(FILE *file, const char *fmt, ...) {
+    va_list vlist;
+    va_start(vlist, fmt);
+    vfprintf(file, fmt, vlist);
+    va_end(vlist);
     fprintf(file, "\n");
     fflush(file);
   }
@@ -50,11 +63,12 @@ public:
     if (level < Level) {
       return;
     }
+    fprintf(stdout, "%s%s:%d\x1b[0m ", Colors[level], filename, line);
+    this->foutput(stdout, fmt, args...);
     if (file_) {
       std::lock_guard<std::mutex> lock(mtx_);
-      this->output(file_, level, filename, line, fmt, args...);
-    } else {
-      this->output(stdout, level, filename, line, fmt, args...);
+      fprintf(file_, "%s:%d ", filename, line);
+      this->foutput(file_, fmt, args...);
     }
   }
 
