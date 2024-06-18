@@ -1,6 +1,7 @@
 #pragma once
 #include "buffer.hpp"
 #include "socket.hpp"
+#include "time.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -206,7 +207,7 @@ static uint8_t Unmarshal264(rtp *r, libyte::Buffer &b) {
     // 开始或这单独结束包
     if (sflag & 0x80 || b.Empty()) {
       b.Write(nalu, 4);
-      b.WriteByte(ntype | 0x60);
+      b.Write((uint8_t)(ntype | 0x60));
     }
     r->data += 2;
     r->size -= 2;
@@ -235,8 +236,8 @@ static uint8_t Unmarshal265(rtp *r, libyte::Buffer &b) {
     if (sflag & 0x80 || b.Empty()) {
       b.Write(nalu, 4);
       ntype = ntype << 1;
-      b.WriteByte(ntype);
-      b.WriteByte(0x01);
+      b.Write(ntype);
+      b.Write((uint8_t)0x01);
     }
     r->data += 3;
     r->size -= 3;
@@ -337,12 +338,6 @@ inline const char *Format(int type) {
   return "";
 }
 
-static long timeMillUnix() {
-  auto tp = std::chrono::time_point_cast<std::chrono::milliseconds>(
-      std::chrono::system_clock::now());
-  return tp.time_since_epoch().count();
-}
-
 #define PKG_LEN 2048
 
 class Client : libnet::Conn {
@@ -368,7 +363,7 @@ public:
     try {
       Dial(url_.ip.c_str(), url_.port);
       doWriteCmd(OPTIONS, seq_++, "");
-      long ts = timeMillUnix();
+      long ts = libtime::UnixMilli();
       for (;;) {
         char buf[PKG_LEN] = {0};
         int n = Read(buf, PKG_LEN);
@@ -395,7 +390,7 @@ public:
               dbuf_.Write((char *)rtp_.data, rtp_.size);
             }
             if (code & 0x40) {
-              DBG("%ld channel %d, %ld\n", timeMillUnix(), ch, dbuf_.Len());
+              DBG("%ld channel %d, %ld\n", ts, ch, dbuf_.Len());
               dbuf_.Reset(0);
             }
             rbuf_.Remove(dlen + 4);
@@ -404,8 +399,8 @@ public:
             doRtspParse((char *)b);
           }
         }
-        if (timeMillUnix() - ts > 50000) {
-          ts = timeMillUnix();
+        if (libtime::Since(ts) > 50000) {
+          ts = libtime::UnixMilli();
           doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
                      url_.GetAuth("GET_PARAMETER").c_str());
         }

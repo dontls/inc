@@ -14,7 +14,7 @@ unsigned short ModBusCRC16(unsigned char *ptr, unsigned char size) {
         crc16 = crc16 ^ 0xa001;
       }
     }
-    *ptr++;
+    ptr++;
   }
   v = ((crc16 & 0x00ff) << 8) | ((crc16 & 0xff00) >> 8);
   return v;
@@ -38,25 +38,25 @@ int main(int argc, char const *argv[]) {
   unsigned char *tmp = src;
   //
   int i = 0;
-  u8 c = Bytes::U8(tmp, i);
-  u16 s = Bytes::LeU16(tmp, i);
-  u32 k = Bytes::LeU32(tmp, i);
-  u64 l = Bytes::LeU64(tmp, i);
+  u8 c = libyte::U8(tmp, i);
+  u16 s = libyte::LeU16(tmp, i);
+  u32 k = libyte::LeU32(tmp, i);
+  u64 l = libyte::LeU64(tmp, i);
   printf("0x%x 0x%02x 0x%04x 0x%016x\n", c, s, k, l);
 
-  BytesBuffer binBuffer;
+  libyte::Buffer bBuffer;
   for (int i = 0; i < 1000; i++) {
-    binBuffer.Write((char *)src, sizeof(src));
+    bBuffer.Write((char *)src, sizeof(src));
   }
-  printf("%s\n", binBuffer.Bytes());
-  printf("Cap: %lu Len: %lu\n", binBuffer.Cap(), binBuffer.Len());
+  printf("%s\n", bBuffer.Bytes());
+  printf("Cap: %lu Len: %lu\n", bBuffer.Cap(), bBuffer.Len());
   char readStr[8];
-  binBuffer.Read(readStr, 8);
-  printf("Cap: %lu Len: %lu\n", binBuffer.Cap(), binBuffer.Len());
+  bBuffer.Read(readStr, 8);
+  printf("Cap: %lu Len: %lu\n", bBuffer.Cap(), bBuffer.Len());
 
-  //   binBuffer.WriteString("hello world");
-  printf("%s\n", binBuffer.Bytes());
-  printf("Cap: %lu Len: %lu\n", binBuffer.Cap(), binBuffer.Len());
+  //   bBuffer.WriteString("hello world");
+  printf("%s\n", bBuffer.Bytes());
+  printf("Cap: %lu Len: %lu\n", bBuffer.Cap(), bBuffer.Len());
 
   unsigned char sendData[] = {0x01, 0x03, 0x00, 0xCE, 0x00, 0x02};
   for (int i = 0; i < 6; i++) {

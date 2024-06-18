@@ -50,7 +50,7 @@ public:
     return tryWriteByRealloc((char *)s, strlen(s));
   }
   // 写入单个字节
-  size_t Write(char c) { return Write(&c, 1); }
+  size_t Write(uint8_t c) { return Write((char *)&c, 1); }
   //
   size_t Write(uint16_t n) { return Write((char *)&n, 2); }
   //
