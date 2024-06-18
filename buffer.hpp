@@ -97,6 +97,9 @@ public:
   }
 
 private:
+  Buffer(const Buffer &) = delete;
+  Buffer &operator=(const Buffer &) = delete;
+
   size_t tryWriteByRealloc(char *p, size_t n) {
     std::lock_guard<std::mutex> lock(lock_);
     size_t s = offset_ + n;
