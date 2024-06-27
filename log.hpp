@@ -9,26 +9,30 @@
 #include <cstdio>
 #include <mutex>
 
+#ifndef LOG_USE_TIME_LINE
+#define LOG_USE_TIME_LINE 1
+#endif
+
+#if LOG_USE_TIME_LINE
+#include "time.hpp"
+#endif
+
 namespace liblog {
 enum level {
-  TRACE, //
   DEBUG, //
   INFO,  //
   WARN,  //
-  ERROR, //
-  FATAL
+  ERROR  //
 };
 
-static const char *Colors[] = {
-    "\x1b[0m",  //
-    "\x1b[36m", //
-    "\x1b[32m", //
-    "\x1b[33m", //
-    "\x1b[31m", //
-    "\x1b[35m", //
+static const char *_levelout[] = {
+    "",                      //
+    "\x1b[32m INFO\x1b[0m",  //
+    "\x1b[33m WARN\x1b[0m",  //
+    "\x1b[31m ERROR\x1b[0m", //
 };
 
-static int Level = TRACE;
+static int Level = DEBUG;
 
 class Logger {
 private:
@@ -63,11 +67,20 @@ public:
     if (level < Level) {
       return;
     }
-    fprintf(stdout, "%s%s:%d\x1b[0m ", Colors[level], filename, line);
+#if LOG_USE_TIME_LINE
+    long long ts = libtime::UnixMilli();
+    std::string s = libtime::Format(ts / 1000);
+    int mills = int(ts % 1000);
+    fprintf(stdout, "%s.%03d%s %s:%d ", s.c_str(), mills, _levelout[level],
+            filename, line);
+#endif
     this->foutput(stdout, fmt, args...);
     if (file_) {
       std::lock_guard<std::mutex> lock(mtx_);
-      fprintf(file_, "%s:%d ", filename, line);
+#if LOG_USE_TIME_LINE
+      fprintf(file_, "%s.%03d%s %s:%d ", s.c_str(), mills, _levelout[level],
+              filename, line);
+#endif
       this->foutput(file_, fmt, args...);
     }
   }
@@ -80,10 +93,6 @@ public:
 
 } // namespace liblog
 
-#define LogTrace(...)                                                          \
-  liblog::Logger::Instance().Println(liblog::TRACE, __FILE__, __LINE__,        \
-                                     ##__VA_ARGS__)
-
 #define LogDebug(...)                                                          \
   liblog::Logger::Instance().Println(liblog::DEBUG, __FILE__, __LINE__,        \
                                      ##__VA_ARGS__)
@@ -93,13 +102,9 @@ public:
                                      ##__VA_ARGS__)
 
 #define LogWarn(b, ...)                                                        \
-  liblog::Logger::Instance().Println((b) ? liblog::WARN : liblog::TRACE,       \
+  liblog::Logger::Instance().Println((b) ? liblog::WARN : liblog::DEBUG,       \
                                      __FILE__, __LINE__, ##__VA_ARGS__);
 
 #define LogError(b, ...)                                                       \
-  liblog::Logger::Instance().Println((b) ? liblog::ERROR : liblog::TRACE,      \
-                                     __FILE__, __LINE__, ##__VA_ARGS__);
-
-#define LogFatal(b, ...)                                                       \
-  liblog::Logger::Instance().Println((b) ? liblog::FATAL : liblog::TRACE,      \
+  liblog::Logger::Instance().Println((b) ? liblog::ERROR : liblog::DEBUG,      \
                                      __FILE__, __LINE__, ##__VA_ARGS__);
