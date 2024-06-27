@@ -20,13 +20,13 @@ inline bool IsDir(const char *path) {
 
 inline size_t Size(const char *filename) {
   HANDLE hFile =
-      CreateFile(filename, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL,
-                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+      ::CreateFile(filename, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
+                   NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-  DWORD dwFileSize = GetFileSize(hFile, NULL); // 获取文件大小
+  DWORD dwFileSize = ::GetFileSize(hFile, NULL); // 获取文件大小
+  ::CloseHandle(hFile);
   return size_t(dwFileSize);
 }
-
 #else
 inline bool IsDir(const char *path) {
   struct stat statbuf;
