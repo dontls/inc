@@ -181,8 +181,8 @@ enum {
   NALU_TYPE_UNSPECIFIED_63,
   NALU_TYPE_INVALID,
 };
-inline int decode_sps(BYTE *buf, unsigned int nLen, uint16_t &width,
-                      uint16_t &height, int &fps) {
+inline int decode_sps(BYTE *buf, unsigned int nLen, UINT &width, UINT &height,
+                      int &fps) {
   if (nLen < 20) {
     return false;
   }
@@ -269,8 +269,8 @@ enum {
   NALU_TYPE_FILL = 12,
 };
 
-inline int decode_sps(BYTE *buf, unsigned int nLen, uint16_t &width,
-                      uint16_t &height, int &fps) {
+inline int decode_sps(BYTE *buf, unsigned int nLen, UINT &width, UINT &height,
+                      int &fps) {
   UINT StartBit = 0;
   fps = 0;
   de_emulation_prevention(buf, &nLen);

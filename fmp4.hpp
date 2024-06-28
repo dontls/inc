@@ -178,29 +178,19 @@ public:
 
 private:
   size_t WriteBoxFtypMoov(std::vector<nalu::Value> &nalus) {
-    std::string sps = std::string(nalus[0].data + 4, nalus[0].size - 4);
-    std::string pps = std::string(nalus[1].data + 4, nalus[1].size - 4);
     libmp4::box::stbl stbl;
-    const char *compat = libmp4::box::stbl_sps_decode(sps, stbl.stsd);
-    int w = stbl.stsd.avc1.width, h = stbl.stsd.avc1.height;
-    if (strcmp(compat, "avc1") == 0) {
-      stbl.str = stbl.stsd.Marshal(sps, pps);
-    } else {
-      std::string vps = std::string(nalus[2].data - 4, nalus[1].size + 4);
-      stbl.str = stbl.stsd.Marshal(sps, pps, vps);
-    }
-    libmp4::box::ftyp pftyp;
-    pftyp.compat3 = libmp4::Le32Type(compat);
     box::moov moov = {0};
-    moov.mvhd.duration = 0;
-    moov.trakv.tkhd.duration = 0;
-    moov.trakv.mdia.mdhd.duration = 0;
-    moov.trakv.tkhd.width = w;
-    moov.trakv.tkhd.height = h;
+    // moov.mvhd.duration = 0;
+    // moov.trakv.tkhd.duration = 0;
+    // moov.trakv.mdia.mdhd.duration = 0;
+    auto &tkhd = moov.trakv.tkhd;
+    libmp4::box::stbl_decode(nalus, stbl, tkhd.width, tkhd.height);
+    libmp4::box::ftyp ftyp;
+    ftyp.compat3 = stbl.stsd.avc1.type;
     int slen = stbl.Marshal();
-    fwrite(pftyp.Marshal(), sizeof(pftyp), 1, file_);
+    fwrite(ftyp.Marshal(), sizeof(ftyp), 1, file_);
     fwrite(moov.Marshal(slen), sizeof(box::moov), 1, file_);
-    return fwrite(stbl.str.c_str(), slen, 1, file_);
+    return fwrite(stbl.Value(), slen, 1, file_);
   }
 };
 
@@ -236,11 +226,8 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
   moof.traf.tfdt.decode_time = libmp4::Htobe32(ts - firts_);
   moof.traf.trun.sample.duration = libmp4::Htobe32(ts - lsts_);
   moof.traf.trun.sample.size = libmp4::Htobe32(len);
-  if (iskey) {
-    moof.traf.trun.sample.flags = libmp4::Htobe32(0x02000000);
-  } else {
-    moof.traf.trun.sample.flags = libmp4::Htobe32(0x00010000);
-  }
+  moof.traf.trun.sample.flags =
+      iskey ? libmp4::Htobe32(0x02000000) : libmp4::Htobe32(0x00010000);
   lsts_ = ts;
   fwrite(moof.Marshal(1, seq_++), sizeof(moof), 1, file_);
   // 写入mdat

@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <string>
 
-#define Debug
+#define Debug printf
 
 namespace libmp4 {
 
@@ -65,47 +65,6 @@ inline void *ftyp::Marshal() {
   compat4 = Le32Type("mp41");
   return this;
 }
-
-struct avcc {
-  u32 size;
-  u32 type;
-  u8 config_ver;
-  u8 avc_profile;
-  u8 profile_compat;
-  u8 avc_level;
-  u8 nalulen;
-  u8 sps_num;
-  u16 sps_len;
-  u8 *sps;
-  u8 pps_num;
-  u16 pps_len;
-  u8 *pps;
-};
-
-struct hvcc {
-  u32 size;
-  u32 type;
-  u8 configurationVersion;
-  u8 general_profile_idc : 5;
-  u8 general_tier_flag : 1;
-  u8 general_profile_space : 2;
-  u32 general_profile_compatibility_flags;
-  u32 general_constraint_indicator_flags0;
-  u16 general_constraint_indicator_flags1;
-  u8 general_level_idc;
-  u16 min_spatial_segmentation_idc;
-  u8 parallelismType;
-  u8 chromaFormat;
-  u8 bitDepthLumaMinus8;
-  u8 bitDepthChromaMinus8;
-  u16 avgFrameRate;
-  u8 lengthSizeMinusOne : 2;
-  u8 temporalIdNested : 1;
-  u8 numTemporalLayers : 3;
-  u8 constantFrameRate : 2;
-  u8 numOfArrays;
-};
-
 struct stsd {
   u32 size;
   u32 type;
@@ -130,15 +89,13 @@ struct stsd {
     u16 depth;
     u16 predefined;
   } avc1;
-  std::string Marshal(std::string &sps, std::string &pps);
-  std::string Marshal(std::string &sps, std::string &pps, std::string vps);
+  const char *Marshal(u32 n);
 };
 
-inline std::string stsd::Marshal(std::string &sps, std::string &pps) {
-  u32 spslen = sps.length(), ppslen = pps.length();
+inline const char *stsd::Marshal(u32 n) {
   type = Le32Type("stsd");
   entry_count = Htobe32(1);
-  avc1.type = Le32Type("avc1");
+  // avc1.type = Le32Type("avc1"); // 外部赋值
   avc1.data_refidx = u16(Htobe32(1) >> 16);
   avc1.width = u16(Htobe32(avc1.width) >> 16);
   avc1.height = u16(Htobe32(avc1.height) >> 16);
@@ -147,105 +104,11 @@ inline std::string stsd::Marshal(std::string &sps, std::string &pps) {
   avc1.frame_count = u16(Htobe32(1) >> 16);
   avc1.depth = u16(Htobe32(24) >> 16);
   avc1.predefined = 0xFFFF;
-  u8 buf[128] = {0};
-  // 附加avcc信息
-  avcc *avc = (avcc *)(buf);
-  avc->type = Le32Type("avcC");
-  avc->config_ver = 1;
-  avc->avc_profile = spslen > 1 ? sps[1] : 0;
-  avc->profile_compat = spslen > 2 ? sps[2] : 0;
-  avc->avc_level = spslen > 3 ? sps[3] : 0;
-  avc->nalulen = 0xFF;
-  int i = offsetof(avcc, sps_num);
-  buf[i++] = (0x7 << 5) | (1 << 0);
-  buf[i++] = (spslen << 8) & 0xff;
-  buf[i++] = spslen & 0xff;
-  ::memcpy(&buf[i], sps.c_str(), spslen);
-  i += spslen;
-  buf[i++] = 1;
-  buf[i++] = (ppslen << 8) & 0xff;
-  buf[i++] = ppslen & 0xff;
-  ::memcpy(&buf[i], pps.c_str(), ppslen);
-  i += ppslen;
-
-  avc->size = Htobe32(i);
-  avc1.size = Htobe32(i + sizeof(avc1));
-  size = Htobe32(i + sizeof(stsd));
-  std::string s1((char *)this, sizeof(stsd));
-  s1.append(std::string((char *)buf, i));
-  Debug("stsd size = %lu\n", s1.length());
-  return s1;
+  avc1.size = Htobe32(n + sizeof(avc1));
+  size = Htobe32(n + sizeof(stsd));
+  return (const char *)this;
 }
 
-inline std::string stsd::Marshal(std::string &sps, std::string &pps,
-                                 std::string vps) {
-  type = Le32Type("stsd");
-  entry_count = Htobe32(1);
-  avc1.type = Le32Type("hvc1");
-  avc1.data_refidx = u16(Htobe32(1) >> 16);
-  avc1.width = u16(Htobe32(avc1.width) >> 16);
-  avc1.height = u16(Htobe32(avc1.height) >> 16);
-  avc1.horiz_res = Htobe32(0x480000);
-  avc1.vert_res = Htobe32(0x480000);
-  avc1.frame_count = u16(Htobe32(1) >> 16);
-  avc1.depth = u16(Htobe32(24) >> 16);
-  avc1.predefined = 0xFFFF;
-  u8 buf[254] = {0};
-  hvcc *hvc = (hvcc *)(buf);
-  hvc->type = Le32Type("hvcC");
-  hvc->configurationVersion = 1;
-  // hvc->general_profile_space= 0;
-  // hvc->general_tier_flag    = 0;
-  hvc->general_profile_idc = 1;
-  hvc->general_profile_compatibility_flags = 0x60;
-  hvc->general_constraint_indicator_flags0 = 0x90;
-  hvc->general_constraint_indicator_flags1 = 0x00;
-  hvc->general_level_idc = 63;
-  hvc->min_spatial_segmentation_idc = 0xf0;
-  hvc->parallelismType = 0 | 0xfc;
-  hvc->chromaFormat = 1 | 0xfc;
-  hvc->bitDepthLumaMinus8 = 0 | 0xf8;
-  hvc->bitDepthChromaMinus8 = 0 | 0xf8;
-  // hvc->avgFrameRate = (u16)(htonl(mp4->frate) >> 16);
-  hvc->avgFrameRate = 0;
-  // hvc->constantFrameRate    = 0;
-  hvc->numTemporalLayers = 1;
-  hvc->temporalIdNested = 1;
-  hvc->lengthSizeMinusOne = 3;
-  hvc->numOfArrays = 3;
-  int i = sizeof(hvcc);
-  u32 spslen = sps.length(), ppslen = pps.length(), vpslen = vps.length();
-  buf[i++] = 32;
-  buf[i++] = 0x00;
-  buf[i++] = 0x01;
-  buf[i++] = (vpslen >> 8) & 0xff;
-  buf[i++] = vpslen & 0xff;
-  memcpy(&buf[i], vps.c_str(), vpslen);
-  i += vpslen;
-
-  buf[i++] = 33;
-  buf[i++] = 0x00;
-  buf[i++] = 0x01;
-  buf[i++] = (spslen >> 8) & 0xff;
-  buf[i++] = spslen & 0xff;
-  memcpy(&buf[i], sps.c_str(), spslen);
-  i += spslen;
-
-  buf[i++] = 34;
-  buf[i++] = 0x00;
-  buf[i++] = 0x01;
-  buf[i++] = (ppslen >> 8) & 0xff;
-  buf[i++] = ppslen & 0xff;
-  memcpy(&buf[i], pps.c_str(), ppslen);
-  i += ppslen;
-
-  hvc->size = Htobe32(i);
-  avc1.size = Htobe32(i + sizeof(avc1));
-  size = Htobe32(i + sizeof(stsd));
-  std::string s1((char *)this, sizeof(stsd));
-  s1.append(std::string((char *)buf, i));
-  return s1;
-}
 // sample_deltas ts
 struct stts {
   u32 size;
@@ -335,10 +198,11 @@ inline const char *stco::Marshal(u32 num) {
   count = Htobe32(num);
   return (const char *)this;
 }
-
-struct stbl {
-  std::string str;
+class stbl {
+public:
   box::stsd stsd;
+
+private:
   box::stts stts;
   box::stss stss;
   box::stsc stsc;
@@ -347,11 +211,16 @@ struct stbl {
   int total_;
   int count_;
   u32 *sample_[4];
+  std::string str;
+
+public:
   stbl()
       : stsd{0}, stts{0}, stss{0}, stsc{0}, stsz{0}, stco{0}, total_(0),
         count_(0), sample_{0} {}
   void AppendSample(u32 dur, u32 &offset, u32 length);
+  void MarshalStsd(char *buf, int n);
   int Marshal();
+  const char *Value() { return str.c_str(); }
 };
 
 inline void stbl::AppendSample(u32 dur, u32 &offset, u32 length) {
@@ -367,6 +236,11 @@ inline void stbl::AppendSample(u32 dur, u32 &offset, u32 length) {
   sample_[3][count_] = Htobe32(offset); // stco
   count_++;
   offset += length;
+}
+
+inline void stbl::MarshalStsd(char *buf, int n) {
+  str = std::string(stsd.Marshal(n), sizeof(stsd));
+  str.append(buf, n);
 }
 
 inline int stbl::Marshal() {
@@ -588,16 +462,143 @@ struct mdat {
 };
 #pragma pack()
 
-inline const char *stbl_sps_decode(std::string &sps, box::stsd &stsd) {
-  int fps = 0;
+struct avcc {
+  u32 size;
+  u32 type;
+  u8 config_ver;
+  u8 avc_profile;
+  u8 profile_compat;
+  u8 avc_level;
+  u8 nalulen;
+  u8 sps_num;
+  u16 sps_len;
+  u8 *sps;
+  u8 pps_num;
+  u16 pps_len;
+  u8 *pps;
+};
+
+inline int AvccMarshal(char *buf, std::string &sps, std::string &pps) {
+  u32 spslen = sps.length(), ppslen = pps.length();
+  // 附加avcc信息
+  avcc *avc = (avcc *)(buf);
+  avc->type = Le32Type("avcC");
+  avc->config_ver = 1;
+  avc->avc_profile = spslen > 1 ? sps[1] : 0;
+  avc->profile_compat = spslen > 2 ? sps[2] : 0;
+  avc->avc_level = spslen > 3 ? sps[3] : 0;
+  avc->nalulen = 0xFF;
+  int i = offsetof(avcc, sps_num);
+  buf[i++] = char((0x7 << 5) | (1 << 0));
+  buf[i++] = (spslen << 8) & 0xff;
+  buf[i++] = spslen & 0xff;
+  ::memcpy(&buf[i], sps.c_str(), spslen);
+  i += spslen;
+  buf[i++] = 1;
+  buf[i++] = (ppslen << 8) & 0xff;
+  buf[i++] = ppslen & 0xff;
+  ::memcpy(&buf[i], pps.c_str(), ppslen);
+  i += ppslen;
+  avc->size = Htobe32(i);
+  return i;
+}
+
+struct hvcc {
+  u32 size;
+  u32 type;
+  u8 configurationVersion;
+  u8 general_profile_idc : 5;
+  u8 general_tier_flag : 1;
+  u8 general_profile_space : 2;
+  u32 general_profile_compatibility_flags;
+  u32 general_constraint_indicator_flags0;
+  u16 general_constraint_indicator_flags1;
+  u8 general_level_idc;
+  u16 min_spatial_segmentation_idc;
+  u8 parallelismType;
+  u8 chromaFormat;
+  u8 bitDepthLumaMinus8;
+  u8 bitDepthChromaMinus8;
+  u16 avgFrameRate;
+  u8 lengthSizeMinusOne : 2;
+  u8 temporalIdNested : 1;
+  u8 numTemporalLayers : 3;
+  u8 constantFrameRate : 2;
+  u8 numOfArrays;
+};
+
+inline int HvccMarshal(char *buf, std::string &sps, std::string &pps,
+                       std::string &vps) {
+  hvcc *hvc = (hvcc *)(buf);
+  hvc->type = Le32Type("hvcC");
+  hvc->configurationVersion = 1;
+  // hvc->general_profile_space= 0;
+  // hvc->general_tier_flag    = 0;
+  hvc->general_profile_idc = 1;
+  hvc->general_profile_compatibility_flags = 0x60;
+  hvc->general_constraint_indicator_flags0 = 0x90;
+  hvc->general_constraint_indicator_flags1 = 0x00;
+  hvc->general_level_idc = 63;
+  hvc->min_spatial_segmentation_idc = 0xf0;
+  hvc->parallelismType = 0 | 0xfc;
+  hvc->chromaFormat = 1 | 0xfc;
+  hvc->bitDepthLumaMinus8 = 0 | 0xf8;
+  hvc->bitDepthChromaMinus8 = 0 | 0xf8;
+  // hvc->avgFrameRate = (u16)(htonl(mp4->frate) >> 16);
+  hvc->avgFrameRate = 0;
+  // hvc->constantFrameRate    = 0;
+  hvc->numTemporalLayers = 1;
+  hvc->temporalIdNested = 1;
+  hvc->lengthSizeMinusOne = 3;
+  hvc->numOfArrays = 3;
+  int i = sizeof(hvcc);
+  u32 spslen = sps.length(), ppslen = pps.length(), vpslen = vps.length();
+  buf[i++] = 32;
+  buf[i++] = 0x00;
+  buf[i++] = 0x01;
+  buf[i++] = (vpslen >> 8) & 0xff;
+  buf[i++] = vpslen & 0xff;
+  memcpy(&buf[i], vps.c_str(), vpslen);
+  i += vpslen;
+
+  buf[i++] = 33;
+  buf[i++] = 0x00;
+  buf[i++] = 0x01;
+  buf[i++] = (spslen >> 8) & 0xff;
+  buf[i++] = spslen & 0xff;
+  memcpy(&buf[i], sps.c_str(), spslen);
+  i += spslen;
+
+  buf[i++] = 34;
+  buf[i++] = 0x00;
+  buf[i++] = 0x01;
+  buf[i++] = (ppslen >> 8) & 0xff;
+  buf[i++] = ppslen & 0xff;
+  memcpy(&buf[i], pps.c_str(), ppslen);
+  i += ppslen;
+  hvc->size = Htobe32(i);
+  return i;
+}
+
+inline const void stbl_decode(std::vector<nalu::Value> &nalus, box::stbl &stbl,
+                              u32 &w, u32 &h) {
+  int fps = 0, n = 0;
+  char buf[256] = {0};
+  std::string sps = std::string(nalus[0].data + 4, nalus[0].size - 4);
+  std::string pps = std::string(nalus[1].data + 4, nalus[1].size - 4);
   if (sps[0] == 0x67) {
-    avc::decode_sps((BYTE *)sps.c_str(), sps.length(), stsd.avc1.width,
-                    stsd.avc1.height, fps);
-    return "avc1";
+    stbl.stsd.avc1.type = Le32Type("avc1");
+    avc::decode_sps((BYTE *)sps.c_str(), sps.length(), w, h, fps);
+    n = AvccMarshal(buf, sps, pps);
+  } else {
+    stbl.stsd.avc1.type = Le32Type("hvc1");
+    std::string vps = std::string(nalus[2].data - 4, nalus[1].size - 4);
+    hevc::decode_sps((BYTE *)sps.c_str(), sps.length(), w, h, fps);
+    n = HvccMarshal(buf, sps, pps, vps);
   }
-  hevc::decode_sps((BYTE *)sps.c_str(), sps.length(), stsd.avc1.width,
-                   stsd.avc1.height, fps);
-  return "hvc1";
+  stbl.stsd.avc1.width = w;
+  stbl.stsd.avc1.height = h;
+  stbl.MarshalStsd(buf, n);
 }
 } // namespace box
 

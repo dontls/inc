@@ -31,23 +31,14 @@ private:
 };
 
 inline size_t Writer::WriteBoxFtyp(std::vector<nalu::Value> &nalus) {
-  std::string sps = std::string(nalus[0].data + 4, nalus[0].size - 4);
-  std::string pps = std::string(nalus[1].data + 4, nalus[1].size - 4);
-  box::ftyp pftyp;
-  const char *compat = box::stbl_sps_decode(sps, stbl_.stsd);
-  int w = stbl_.stsd.avc1.width, h = stbl_.stsd.avc1.height;
-  pftyp.compat3 = Le32Type(compat);
-  if (strcmp(compat, "avc1") == 0) {
-    stbl_.str = stbl_.stsd.Marshal(sps, pps);
-  } else {
-    std::string vps = std::string(nalus[2].data - 4, nalus[1].size + 4);
-    stbl_.str = stbl_.stsd.Marshal(sps, pps, vps);
-  }
-  moov_.trakv.tkhd.width = w;
-  moov_.trakv.tkhd.height = h;
-  fwrite(pftyp.Marshal(), sizeof(pftyp), 1, file_);
+  box::ftyp ftyp;
+  auto &tkhd = moov_.trakv.tkhd;
+  box::stbl_decode(nalus, stbl_, tkhd.width, tkhd.height);
+  ftyp.compat3 = stbl_.stsd.avc1.type;
   mdat_.type = Le32Type("mdat");
+  // 未转换，sample写入计数
   mdat_.size = sizeof(box::ftyp) + sizeof(box::mdat);
+  fwrite(ftyp.Marshal(), sizeof(ftyp), 1, file_);
   return fwrite(&mdat_, sizeof(mdat_), 1, file_);
 }
 
@@ -58,8 +49,8 @@ inline size_t Writer::WriteBoxMoov() {
   int len = stbl_.Marshal();
   // moov
   fwrite(moov_.Marshal(len), sizeof(box::moov), 1, file_);
-  fwrite(stbl_.str.c_str(), len, 1, file_);
-  // 更新mdat size
+  fwrite(stbl_.Value(), len, 1, file_);
+  // mdat 头
   fseek(file_, sizeof(box::ftyp), SEEK_SET);
   mdat_.size = Htobe32(mdat_.size - sizeof(box::ftyp));
   return fwrite(&mdat_, sizeof(mdat_), 1, file_);
