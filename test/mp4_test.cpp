@@ -1,4 +1,5 @@
 #include "../mp4.hpp"
+#include "../fmp4.hpp"
 
 #define READ_BUF_SIZ 500000
 
@@ -27,7 +28,7 @@ int main(int argc, char const *argv[]) {
   if (file == NULL) {
     return -1;
   }
-  libmp4::Writer w("1080p.mp4");
+  libfmp4::Writer w("1080p.mp4");
   long ts = 100000;
   char *b = new char[READ_BUF_SIZ];
   for (;;) {
@@ -42,7 +43,9 @@ int main(int argc, char const *argv[]) {
     }
     bool type = (b[4] & 0x1F) == 1 ? false : true;
     // printf("length %d\n", offset);
-    w.WriteVideo(ts, type, b, offset);
+    if (w.WriteVideo(ts, type, b, offset) < 0) {
+      break;
+    }
     fseek(file, offset - n, SEEK_CUR);
     ts += 40;
   }

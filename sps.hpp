@@ -389,14 +389,15 @@ inline int decode_sps(BYTE *buf, unsigned int nLen, uint16_t &width,
 
 // 返回nalu结束位置, 包含nalu头
 
-struct nalu {
+namespace nalu {
+struct Value {
   int type;
   int size;
   char *data;
 };
 
 // 返回下个nalu开始的位置，length剩余数据长度
-inline char *naluparse(char *data, size_t &length, std::vector<nalu> &nalus) {
+inline char *Split(char *data, size_t &length, std::vector<Value> &nalus) {
   if (length <= 0) {
     return nullptr;
   }
@@ -412,11 +413,13 @@ inline char *naluparse(char *data, size_t &length, std::vector<nalu> &nalus) {
   if (i >= length) {
     return ptr;
   }
-  nalu u;
+  Value u;
   u.data = ptr;
   u.type = ptr[4];
   u.size = i - 3;
   nalus.push_back(u);
   length -= u.size;
-  return naluparse(ptr + u.size, length, nalus);
+  return Split(ptr + u.size, length, nalus);
+} // namespace nalu
+
 } // namespace nalu
