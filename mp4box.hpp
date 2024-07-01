@@ -210,13 +210,14 @@ private:
   box::stco stco;
   int total_;
   int count_;
-  u32 *sample_[4];
+  std::vector<u32> sample_[4];
   std::string str;
 
 public:
   stbl()
       : stsd{0}, stts{0}, stss{0}, stsc{0}, stsz{0}, stco{0}, total_(0),
-        count_(0), sample_{0} {}
+        count_(0) {}
+  ~stbl() {}
   void AppendSample(u32 dur, u32 &offset, u32 length);
   void MarshalStsd(char *buf, int n);
   int Marshal();
@@ -227,13 +228,13 @@ inline void stbl::AppendSample(u32 dur, u32 &offset, u32 length) {
   if (count_ == total_) {
     total_ += 256;
     for (int i = 0; i < 4; i++) {
-      sample_[i] = (u32 *)realloc(sample_[i], total_ * sizeof(u32));
+      sample_[i].resize(total_);
     }
   }
-  sample_[0][count_] = Htobe32(dur);    // stts
-  sample_[1][count_] = Htobe32(1);      // stss
-  sample_[2][count_] = Htobe32(length); // stsz
-  sample_[3][count_] = Htobe32(offset); // stco
+  sample_[0].emplace_back(Htobe32(dur));    // stts
+  sample_[1].emplace_back(Htobe32(1));      // stss
+  sample_[2].emplace_back(Htobe32(length)); // stsz
+  sample_[3].emplace_back(Htobe32(offset)); // stco
   count_++;
   offset += length;
 }
@@ -247,20 +248,20 @@ inline int stbl::Marshal() {
   int samplesize = sizeof(u32) * count_;
   str.append(stts.Marshal(count_), sizeof(stts));
   if (count_ > 0) {
-    str.append((const char *)sample_[0], samplesize);
+    str.append((char *)sample_[0].data(), samplesize);
   }
   str.append(stss.Marshal(count_), sizeof(stss));
   if (count_ > 0) {
-    str.append((const char *)sample_[1], samplesize);
+    str.append((char *)sample_[1].data(), samplesize);
   }
   str.append(stsc.Marshal(), sizeof(stsc));
   str.append(stsz.Marshal(count_), sizeof(stsz));
   if (count_ > 0) {
-    str.append((const char *)sample_[2], samplesize);
+    str.append((char *)sample_[2].data(), samplesize);
   }
   str.append(stco.Marshal(count_), sizeof(stco));
   if (count_ > 0) {
-    str.append((const char *)sample_[3], samplesize);
+    str.append((char *)sample_[3].data(), samplesize);
   }
   return int(str.length());
 }
