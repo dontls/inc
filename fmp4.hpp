@@ -1,7 +1,6 @@
 #pragma once
 
 #include "mp4box.hpp"
-#include <string>
 
 namespace libfmp4 {
 
@@ -11,70 +10,30 @@ static u32 _version_flag(u32 v, u32 f) {
 }
 namespace box {
 #pragma pack(1)
-struct moov {
+struct mvex {
   u32 size;
   u32 type;
   struct {
     u32 size;
     u32 type;
-    u8 version;
-    u8 flags[3];
-    u32 create_time;
-    u32 modify_time;
-    u32 timescale;
-    u32 duration;
-    u32 playrate;
-    u16 volume;
-    u8 reserved[10];
-    u32 matrix[9];
-    u8 predefined[24];
-    u32 next_trackid;
-  } mvhd;
-  struct {
-    u32 size;
-    u32 type;
-    struct {
-      u32 size;
-      u32 type;
-      u32 verflags; //
-      u32 track_id;
-      u32 default_sample_descriptionIndex;
-      u32 default_sample_duration;
-      u32 default_sample_size;
-      u32 default_sample_flags;
-    } trex;
-  } mvex;
-  libmp4::box::trak trakv;
-  void *Marshal(u32 len1, u32 len2 = 0);
+    u32 verflags; //
+    u32 track_id;
+    u32 default_sample_descriptionIndex;
+    u32 default_sample_duration;
+    u32 default_sample_size;
+    u32 default_sample_flags;
+  } trex;
+  void *Marshal();
 };
 
-inline void *moov::Marshal(u32 len1, u32 len2) {
-  size = libmp4::Htobe32(sizeof(moov) + len1 + len2);
-  type = libmp4::Le32Type("moov");
-  mvhd.size = libmp4::Htobe32_Sizeof(mvhd);
-  mvhd.type = libmp4::Le32Type("mvhd");
-  mvhd.create_time = libmp4::Htobe32((u32)time(NULL));
-  mvhd.modify_time = mvhd.create_time;
-  // mvhd.duration = ; // 外部更新
-  mvhd.timescale = libmp4::Htobe32(1000);
-
-  mvhd.playrate = libmp4::Htobe32(0x00010000);
-  mvhd.volume = u16(libmp4::Htobe32(1));
-  libmp4::Matrix(mvhd.matrix);
-  if (len2 > 0) {
-    mvhd.next_trackid = libmp4::Htobe32(3);
-  } else {
-    mvhd.next_trackid = libmp4::Htobe32(2);
-  }
-
-  mvex.size = libmp4::Htobe32_Sizeof(mvex);
-  mvex.type = libmp4::Le32Type("mvex");
-  mvex.trex.size = libmp4::Htobe32_Sizeof(mvex.trex);
-  mvex.trex.type = libmp4::Le32Type("trex");
-  mvex.trex.verflags = libmp4::Htobe32(_version_flag(0, 0));
-  mvex.trex.default_sample_descriptionIndex = libmp4::Htobe32(1);
-  mvex.trex.track_id = libmp4::Htobe32(1);
-  trakv.Marshal(len1);
+inline void *mvex::Marshal() {
+  size = libmp4::Htobe32_Sizeof(mvex);
+  type = libmp4::Le32Type("mvex");
+  trex.size = libmp4::Htobe32_Sizeof(trex);
+  trex.type = libmp4::Le32Type("trex");
+  trex.verflags = libmp4::Htobe32(_version_flag(0, 0));
+  trex.default_sample_descriptionIndex = libmp4::Htobe32(1);
+  trex.track_id = libmp4::Htobe32(1);
   return this;
 }
 
@@ -117,17 +76,17 @@ struct moof {
     } trun;
   } traf;
   libmp4::box::mdat mdatv;
-  void *Marshal(u32 trackId, u32 seq);
+  void Marshal(u32 trackId);
 };
 
-inline void *moof::Marshal(u32 trackId, u32 seq) {
+inline void moof::Marshal(u32 trackId) {
   size = libmp4::Htobe32(sizeof(moof) - sizeof(libmp4::box::mdat));
   type = libmp4::Le32Type("moof");
 
   mfhd.size = libmp4::Htobe32_Sizeof(mfhd);
   mfhd.type = libmp4::Le32Type("mfhd");
   mfhd.verflags = libmp4::Htobe32(_version_flag(0, 0));
-  mfhd.sequenceNumber = libmp4::Htobe32(seq);
+  // mfhd.sequenceNumber = libmp4::Htobe32(seq);
 
   traf.size = libmp4::Htobe32_Sizeof(traf);
   traf.type = libmp4::Le32Type("traf");
@@ -151,8 +110,6 @@ inline void *moof::Marshal(u32 trackId, u32 seq) {
   traf.trun.sample.time_offset = 0;
 
   mdatv.type = libmp4::Le32Type("mdat");
-  mdatv.size = libmp4::Htobe32(mdatv.size + sizeof(libmp4::box::mdat));
-  return this;
 }
 } // namespace box
 #pragma pack()
@@ -164,6 +121,7 @@ private:
   int64_t firts_;
   int64_t lsts_;
   uint32_t seq_;
+  box::moof moofv_;
 
 public:
   Writer() : file_(nullptr), firts_(0), lsts_(0), seq_(0) {}
@@ -178,19 +136,17 @@ public:
 
 private:
   size_t WriteBoxFtypMoov(std::vector<nalu::Value> &nalus) {
-    libmp4::box::stbl stbl;
-    box::moov moov = {0};
-    // moov.mvhd.duration = 0;
-    // moov.trakv.tkhd.duration = 0;
-    // moov.trakv.mdia.mdhd.duration = 0;
-    auto &tkhd = moov.trakv.tkhd;
-    libmp4::box::stbl_decode(nalus, stbl, tkhd.width, tkhd.height);
-    libmp4::box::ftyp ftyp;
-    ftyp.compat3 = stbl.stsd.avc1.type;
-    int slen = stbl.Marshal();
+    libmp4::box::ftyp ftyp = {0};
+    libmp4::box::moov moov = {0};
+    box::mvex mvex = {0};
+    libmp4::Trak trakv;
+    ftyp.compat3 = trakv.MakeVideo(nalus);
+    moofv_.Marshal(1);
+    int vlen = trakv.Marshal();
     fwrite(ftyp.Marshal(), sizeof(ftyp), 1, file_);
-    fwrite(moov.Marshal(slen), sizeof(box::moov), 1, file_);
-    return fwrite(stbl.Value(), slen, 1, file_);
+    fwrite(moov.Marshal(vlen + sizeof(box::mvex)), sizeof(moov), 1, file_);
+    fwrite(mvex.Marshal(), sizeof(box::mvex), 1, file_);
+    return fwrite(trakv.Value(), vlen, 1, file_);
   }
 };
 
@@ -214,22 +170,21 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
   char *ptr = nalu::Split(data, len, nalus);
   if (iskey && firts_ == 0) {
     this->WriteBoxFtypMoov(nalus);
-    firts_ = ts;
-    lsts_ = ts;
+    firts_ = lsts_ = ts;
   }
   if (firts_ == 0) {
     return 0;
   }
   // 写入moof
-  box::moof moof;
-  moof.mdatv.size = len;
-  moof.traf.tfdt.decode_time = libmp4::Htobe32(ts - firts_);
-  moof.traf.trun.sample.duration = libmp4::Htobe32(ts - lsts_);
-  moof.traf.trun.sample.size = libmp4::Htobe32(len);
-  moof.traf.trun.sample.flags =
-      iskey ? libmp4::Htobe32(0x02000000) : libmp4::Htobe32(0x00010000);
+  moofv_.mfhd.sequenceNumber = libmp4::Htobe32(seq_++);
+  moofv_.mdatv.size = libmp4::Htobe32(len + sizeof(libmp4::box::mdat));
+  moofv_.traf.tfdt.decode_time = libmp4::Htobe32(ts - firts_);
+  moofv_.traf.trun.sample.duration = libmp4::Htobe32(ts - lsts_);
+  moofv_.traf.trun.sample.size = libmp4::Htobe32(len);
+  moofv_.traf.trun.sample.flags =
+      libmp4::Htobe32(iskey ? 0x02000000 : 0x00010000);
   lsts_ = ts;
-  fwrite(moof.Marshal(1, seq_++), sizeof(moof), 1, file_);
+  fwrite(&moofv_, sizeof(box::moof), 1, file_);
   // 写入mdat
   u32 slen = libmp4::Htobe32(len - 4);
   fwrite(&slen, sizeof(u32), 1, file_);

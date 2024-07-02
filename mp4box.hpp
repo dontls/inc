@@ -2,6 +2,7 @@
 
 #include "byte.hpp"
 #include "sps.hpp"
+#include <cassert>
 #include <cstddef>
 #include <cstdlib>
 #include <string.h>
@@ -65,7 +66,7 @@ inline void *ftyp::Marshal() {
   compat4 = Le32Type("mp41");
   return this;
 }
-struct stsd {
+struct stsdv {
   u32 size;
   u32 type;
   u8 version;
@@ -92,7 +93,7 @@ struct stsd {
   const char *Marshal(u32 n);
 };
 
-inline const char *stsd::Marshal(u32 n) {
+inline const char *stsdv::Marshal(u32 n) {
   type = Le32Type("stsd");
   entry_count = Htobe32(1);
   // avc1.type = Le32Type("avc1"); // 外部赋值
@@ -105,7 +106,81 @@ inline const char *stsd::Marshal(u32 n) {
   avc1.depth = u16(Htobe32(24) >> 16);
   avc1.predefined = 0xFFFF;
   avc1.size = Htobe32(n + sizeof(avc1));
-  size = Htobe32(n + sizeof(stsd));
+  size = Htobe32(n + sizeof(stsdv));
+  return (const char *)this;
+}
+
+struct stsda {
+  u32 size;
+  u32 type;
+  u8 version;
+  u8 flags[3];
+  u32 entry_count;
+  struct {
+    u32 size;
+    u32 type;
+    u8 reserved1[6];
+    u16 data_refidx;
+    u32 reserved2[2];
+    u16 channel_num;
+    u16 sample_size;
+    u16 predefined1;
+    u16 reserved3;
+    u32 sample_rate;
+    struct {
+      u32 size;
+      u32 type;
+      u8 version;
+      u8 flags[3];
+      u8 esdesc_tag;    // 0x03
+      u16 esdesc_len;   // ((25 << 8) | 0x80)
+      u16 esdesc_id;    // 0x0200
+      u8 esdesc_flags;  // 0x00
+      u8 deccfg_tag;    // 0x04
+      u8 deccfg_len;    // 17
+      u8 deccfg_object; // 0x40 - aac, 0x6B - mp3
+      u8 deccfg_stream; // 0x15
+      u8 deccfg_buffer_size[3];
+      u32 deccfg_max_bitrate;
+      u32 deccfg_avg_bitrate;
+      //++ if deccfg_object == aac
+      u8 decspec_tag; // 0x05
+      u8 decspec_len; // 2
+      u16 decspec_info;
+      //-- if deccfg_object == aac
+      u8 slcfg_tag;      // 0x06
+      u8 slcfg_len;      // 1
+      u8 slcfg_reserved; // 0x02
+    } esds;
+  } mp4a;
+  const char *Marshal(char *aacspec);
+};
+
+inline const char *stsda::Marshal(char *aacspec) {
+  size = Htobe32_Sizeof(stsda);
+  type = Le32Type("stsd");
+  entry_count = Htobe32(1);
+  // avc1.type = Le32Type("avc1"); // 外部赋值
+  mp4a.size = Htobe32_Sizeof(mp4a);
+  mp4a.type = Le32Type("mp4a");
+  mp4a.data_refidx = (u16)(Htobe32(1) >> 16);
+  // mp4a.channel_num =
+  mp4a.esds.size = Htobe32_Sizeof(mp4a.esds);
+  mp4a.esds.type = Le32Type("esds");
+  mp4a.esds.esdesc_tag = 0x03;
+  mp4a.esds.esdesc_len = ((25 << 8) | 0x80);
+  mp4a.esds.esdesc_id = 0x0200;
+  mp4a.esds.esdesc_flags = 0x00;
+  mp4a.esds.deccfg_tag = 0x04;
+  mp4a.esds.deccfg_len = 17;
+  mp4a.esds.deccfg_object = 0x40;
+  mp4a.esds.deccfg_stream = 0x15;
+  mp4a.esds.decspec_tag = 0x05;
+  mp4a.esds.decspec_len = 2;
+  mp4a.esds.decspec_info = aacspec ? (aacspec[1] << 8) | (aacspec[0] << 0) : 0;
+  mp4a.esds.slcfg_tag = 0x06;
+  mp4a.esds.slcfg_len = 1;
+  mp4a.esds.slcfg_reserved = 0x02;
   return (const char *)this;
 }
 
@@ -198,73 +273,6 @@ inline const char *stco::Marshal(u32 num) {
   count = Htobe32(num);
   return (const char *)this;
 }
-class stbl {
-public:
-  box::stsd stsd;
-
-private:
-  box::stts stts;
-  box::stss stss;
-  box::stsc stsc;
-  box::stsz stsz;
-  box::stco stco;
-  int total_;
-  int count_;
-  std::vector<u32> sample_[4];
-  std::string str;
-
-public:
-  stbl()
-      : stsd{0}, stts{0}, stss{0}, stsc{0}, stsz{0}, stco{0}, total_(0),
-        count_(0) {}
-  ~stbl() {}
-  void AppendSample(u32 dur, u32 &offset, u32 length);
-  void MarshalStsd(char *buf, int n);
-  int Marshal();
-  const char *Value() { return str.c_str(); }
-};
-
-inline void stbl::AppendSample(u32 dur, u32 &offset, u32 length) {
-  if (count_ == total_) {
-    total_ += 256;
-    for (int i = 0; i < 4; i++) {
-      sample_[i].resize(total_);
-    }
-  }
-  sample_[0].emplace_back(Htobe32(dur));    // stts
-  sample_[1].emplace_back(Htobe32(1));      // stss
-  sample_[2].emplace_back(Htobe32(length)); // stsz
-  sample_[3].emplace_back(Htobe32(offset)); // stco
-  count_++;
-  offset += length;
-}
-
-inline void stbl::MarshalStsd(char *buf, int n) {
-  str = std::string(stsd.Marshal(n), sizeof(stsd));
-  str.append(buf, n);
-}
-
-inline int stbl::Marshal() {
-  int samplesize = sizeof(u32) * count_;
-  str.append(stts.Marshal(count_), sizeof(stts));
-  if (count_ > 0) {
-    str.append((char *)sample_[0].data(), samplesize);
-  }
-  str.append(stss.Marshal(count_), sizeof(stss));
-  if (count_ > 0) {
-    str.append((char *)sample_[1].data(), samplesize);
-  }
-  str.append(stsc.Marshal(), sizeof(stsc));
-  str.append(stsz.Marshal(count_), sizeof(stsz));
-  if (count_ > 0) {
-    str.append((char *)sample_[2].data(), samplesize);
-  }
-  str.append(stco.Marshal(count_), sizeof(stco));
-  if (count_ > 0) {
-    str.append((char *)sample_[3].data(), samplesize);
-  }
-  return int(str.length());
-}
 
 struct trak {
   u32 size;
@@ -348,21 +356,15 @@ struct trak {
       } stbl;
     } minf;
   } mdia;
-  void Marshal(u32 length);
+  const char *Marshal(u32 id, u32 length);
 };
 
-/**
- * @brief
- *
- * @param length stbl
- */
-
-inline void trak::Marshal(u32 length) {
+inline const char *trak::Marshal(u32 id, u32 length) {
   // tkhd
   tkhd.size = Htobe32_Sizeof(tkhd);
   tkhd.type = Le32Type("tkhd");
   tkhd.flags[2] = 0xF;
-  tkhd.trackid = Htobe32(1);
+  tkhd.trackid = Htobe32(id);
   Matrix(tkhd.matrix);
   tkhd.width = Htobe32(tkhd.width << 16);   //
   tkhd.height = Htobe32(tkhd.height << 16); //
@@ -378,7 +380,11 @@ inline void trak::Marshal(u32 length) {
   ::strcpy((char *)mdia.hdlr.name, "dontls");
 
   mdia.minf.vmhd.size = Htobe32_Sizeof(mdia.minf.vmhd);
-  mdia.minf.vmhd.type = Le32Type("vmhd");
+  if (id == 1) {
+    mdia.minf.vmhd.type = Le32Type("vmhd");
+  } else {
+    mdia.minf.vmhd.type = Le32Type("smhd"); // 音频
+  }
   mdia.minf.vmhd.flags[2] = 1;
 
   mdia.minf.dinf.size = Htobe32_Sizeof(mdia.minf.dinf);
@@ -410,6 +416,7 @@ inline void trak::Marshal(u32 length) {
   size = Htobe32(sizeof(trak) + length);
   type = Le32Type("trak");
   Debug("trak size = %u\n", Htobe32(size));
+  return (const char *)this;
 }
 
 struct moov {
@@ -431,7 +438,6 @@ struct moov {
     u8 predefined[24];
     u32 next_trackid;
   } mvhd;
-  trak trakv;
   void *Marshal(u32 len1, u32 len2 = 0);
 };
 
@@ -453,16 +459,15 @@ inline void *moov::Marshal(u32 len1, u32 len2) {
   } else {
     mvhd.next_trackid = Htobe32(2);
   }
-  trakv.Marshal(len1);
   return this;
 }
 
 struct mdat {
-  uint32_t size;
-  uint32_t type;
+  u32 size;
+  u32 type;
 };
 #pragma pack()
-
+} // namespace box
 struct avcc {
   u32 size;
   u32 type;
@@ -545,7 +550,7 @@ inline int HvccMarshal(char *buf, std::string &sps, std::string &pps,
   hvc->chromaFormat = 1 | 0xfc;
   hvc->bitDepthLumaMinus8 = 0 | 0xf8;
   hvc->bitDepthChromaMinus8 = 0 | 0xf8;
-  // hvc->avgFrameRate = (u16)(htonl(mp4->frate) >> 16);
+  // hvc->avgFrameRate = (u16)(htonl(mp4a.frate) >> 16);
   hvc->avgFrameRate = 0;
   // hvc->constantFrameRate    = 0;
   hvc->numTemporalLayers = 1;
@@ -581,26 +586,101 @@ inline int HvccMarshal(char *buf, std::string &sps, std::string &pps,
   return i;
 }
 
-inline const void stbl_decode(std::vector<nalu::Value> &nalus, box::stbl &stbl,
-                              u32 &w, u32 &h) {
+class Trak {
+private:
+  u32 id_;
+  box::trak trak_;
+  struct {
+    box::stts stts;
+    box::stss stss;
+    box::stsc stsc;
+    box::stsz stsz;
+    box::stco stco;
+  } stbl;
+  int64_t firts_;
+  int64_t lsts_;
+  int count_;
+  std::vector<u32> value[4];
+  std::string str;
+  std::string stsdv_;
+
+public:
+  Trak() : id_(0), trak_{0}, stbl{0}, firts_(0), lsts_(0), count_(0) {}
+  ~Trak() {}
+  void AppendSample(int64_t ts, u32 &offset, u32 length);
+  u32 MakeVideo(std::vector<nalu::Value> &nalus);
+  u32 MakeAudio(char *accspec);
+  int Marshal();
+  u32 Duration() { return Htobe32(lsts_ - firts_); }
+  const char *Value() { return str.c_str(); }
+};
+
+inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length) {
+  if (firts_ == 0) {
+    firts_ = lsts_ = ts;
+  }
+  value[0].emplace_back(Htobe32(ts - lsts_)); // stts
+  value[1].emplace_back(Htobe32(1));          // stss
+  value[2].emplace_back(Htobe32(length));     // stsz
+  value[3].emplace_back(Htobe32(offset));     // stco
+  lsts_ = ts;
+  count_++;
+  offset += length;
+}
+
+inline int Trak::Marshal() {
+  u32 dur = Htobe32(lsts_ - firts_);
+  trak_.tkhd.duration = dur;
+  trak_.mdia.mdhd.duration = dur;
+  int samplesize = sizeof(u32) * count_;
+  u32 size = sizeof(stbl) + stsdv_.length() + samplesize * 4;
+  str = std::string(trak_.Marshal(id_, size), sizeof(box::trak));
+  str.append(stsdv_);
+  str.append(stbl.stts.Marshal(count_), sizeof(box::stts));
+  str.append((char *)value[0].data(), samplesize);
+  str.append(stbl.stss.Marshal(count_), sizeof(box::stss));
+  str.append((char *)value[1].data(), samplesize);
+  str.append(stbl.stsc.Marshal(), sizeof(box::stsc));
+  str.append(stbl.stsz.Marshal(count_), sizeof(box::stsz));
+  str.append((char *)value[2].data(), samplesize);
+  str.append(stbl.stco.Marshal(count_), sizeof(box::stco));
+  str.append((char *)value[3].data(), samplesize);
+  return size + sizeof(box::trak);
+}
+
+inline u32 Trak::MakeVideo(std::vector<nalu::Value> &nalus) {
+  assert(id_ == 0);
   int fps = 0, n = 0;
   char buf[256] = {0};
   std::string sps = std::string(nalus[0].data + 4, nalus[0].size - 4);
   std::string pps = std::string(nalus[1].data + 4, nalus[1].size - 4);
+  box::stsdv stsd;
   if (sps[0] == 0x67) {
-    stbl.stsd.avc1.type = Le32Type("avc1");
-    avc::decode_sps((BYTE *)sps.c_str(), sps.length(), w, h, fps);
+    stsd.avc1.type = Le32Type("avc1");
+    avc::decode_sps((BYTE *)sps.c_str(), sps.length(), trak_.tkhd.width,
+                    trak_.tkhd.height, fps);
     n = AvccMarshal(buf, sps, pps);
   } else {
-    stbl.stsd.avc1.type = Le32Type("hvc1");
+    stsd.avc1.type = Le32Type("hvc1");
     std::string vps = std::string(nalus[2].data - 4, nalus[1].size - 4);
-    hevc::decode_sps((BYTE *)sps.c_str(), sps.length(), w, h, fps);
+    hevc::decode_sps((BYTE *)sps.c_str(), sps.length(), trak_.tkhd.width,
+                     trak_.tkhd.height, fps);
     n = HvccMarshal(buf, sps, pps, vps);
   }
-  stbl.stsd.avc1.width = w;
-  stbl.stsd.avc1.height = h;
-  stbl.MarshalStsd(buf, n);
+  stsd.avc1.width = trak_.tkhd.width;
+  stsd.avc1.height = trak_.tkhd.height;
+  stsdv_ = std::string(stsd.Marshal(n), sizeof(box::stsdv));
+  stsdv_.append(buf, n);
+  id_ = 1;
+  return stsd.avc1.type;
 }
-} // namespace box
+
+inline u32 Trak::MakeAudio(char *accspec) {
+  assert(id_ == 0);
+  id_ = 2;
+  box::stsda stsd;
+  stsdv_.append(stsd.Marshal(accspec), sizeof(box::stsda));
+  return 0;
+}
 
 } // namespace libmp4

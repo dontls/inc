@@ -1,21 +1,17 @@
 #pragma once
 
 #include "mp4box.hpp"
-#include <string>
 namespace libmp4 {
 // mp4
 // ftyp+mdat(size+type,size+data,size+data...)+moov
 class Writer {
 private:
   FILE *file_;
-  int64_t firts_;
-  int64_t lsts_;
-  box::moov moov_;
   box::mdat mdat_;
-  box::stbl stbl_;
-
+  Trak trakv_;
+  // Trak traka_;
 public:
-  Writer() : file_(nullptr), firts_(0), lsts_(0), moov_{0}, mdat_{0} {}
+  Writer() : file_(nullptr), mdat_{0} {}
   Writer(const char *filename) : Writer() { this->Open(filename); }
   ~Writer() { this->Close(); }
   bool Open(const char *filename) {
@@ -32,9 +28,7 @@ private:
 
 inline size_t Writer::WriteBoxFtyp(std::vector<nalu::Value> &nalus) {
   box::ftyp ftyp;
-  auto &tkhd = moov_.trakv.tkhd;
-  box::stbl_decode(nalus, stbl_, tkhd.width, tkhd.height);
-  ftyp.compat3 = stbl_.stsd.avc1.type;
+  ftyp.compat3 = trakv_.MakeVideo(nalus);
   mdat_.type = Le32Type("mdat");
   // 未转换，sample写入计数
   mdat_.size = sizeof(box::ftyp) + sizeof(box::mdat);
@@ -43,14 +37,14 @@ inline size_t Writer::WriteBoxFtyp(std::vector<nalu::Value> &nalus) {
 }
 
 inline size_t Writer::WriteBoxMoov() {
-  moov_.mvhd.duration = Htobe32(lsts_ - firts_);
-  moov_.trakv.tkhd.duration = moov_.mvhd.duration;
-  moov_.trakv.mdia.mdhd.duration = moov_.mvhd.duration;
-  int len = stbl_.Marshal();
-  // moov
-  fwrite(moov_.Marshal(len), sizeof(box::moov), 1, file_);
-  fwrite(stbl_.Value(), len, 1, file_);
-  // mdat 头
+  box::moov moov = {0};
+  int len = trakv_.Marshal();
+  // int len1 = traka_.Marshal();
+  moov.mvhd.duration = trakv_.Duration();
+  fwrite(moov.Marshal(len), sizeof(box::moov), 1, file_);
+  fwrite(trakv_.Value(), len, 1, file_);
+  // fwrite(traka_.Value(), len1, 1, file_);
+  //  mdat 头
   fseek(file_, sizeof(box::ftyp), SEEK_SET);
   mdat_.size = Htobe32(mdat_.size - sizeof(box::ftyp));
   return fwrite(&mdat_, sizeof(mdat_), 1, file_);
@@ -70,17 +64,14 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
   }
   std::vector<nalu::Value> nalus;
   char *ptr = nalu::Split(data, len, nalus);
-  if (iskey && firts_ == 0) {
+  if (iskey && mdat_.type == 0) {
     WriteBoxFtyp(nalus);
-    firts_ = ts;
-    lsts_ = ts;
   }
-  if (firts_ == 0) {
+  if (mdat_.type == 0) {
     return 0;
   }
   // stbl信息
-  stbl_.AppendSample(ts - lsts_, mdat_.size, len);
-  lsts_ = ts;
+  trakv_.AppendSample(ts, mdat_.size, len);
   // mdat数据
   uint32_t slen = Htobe32(len - 4);
   fwrite(&slen, sizeof(uint32_t), 1, file_);
