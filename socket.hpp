@@ -544,17 +544,17 @@ inline Socket::Socket(socket_t p_socket) : m_sock(p_socket) {
 }
 
 // ========================================================================
-// Class:       Conn
+// Class:       TcpConn
 // Purpose:     A variation of the BasicSocket base class that handles
 //              TCP/IP data connections.
 // ========================================================================
-class Conn : public Socket {
+class TcpConn : public Socket {
 public:
   // ====================================================================
-  // Function:    Conn
+  // Function:    TcpConn
   // Purpose:     Constructs the data socket with optional values
   // ====================================================================
-  Conn(socket_t p_socket = INVALID_SOCKET);
+  TcpConn(socket_t p_socket = INVALID_SOCKET);
 
   // ====================================================================
   // Function:    GetRemoteAddress
@@ -637,7 +637,7 @@ private:
   }
 };
 
-inline Conn::Conn(socket_t p_socket) : Socket(p_socket), m_connected(false) {
+inline TcpConn::TcpConn(socket_t p_socket) : Socket(p_socket), m_connected(false) {
   if (p_socket != INVALID_SOCKET) {
     socklen_t s = sizeof(m_remoteinfo);
     getpeername(p_socket, (sockaddr *)(&m_remoteinfo), &s);
@@ -650,7 +650,7 @@ inline Conn::Conn(socket_t p_socket) : Socket(p_socket), m_connected(false) {
 //              if the socket is already connected, or the server
 //              rejects the connection.
 // ====================================================================
-inline void Conn::Dial(const char *p_addr, port p_port) {
+inline void TcpConn::Dial(const char *p_addr, port p_port) {
   int err;
 
   // if the socket is already connected...
@@ -692,7 +692,7 @@ inline void Conn::Dial(const char *p_addr, port p_port) {
 // Purpose:     Attempts to send data, and returns the number of
 //              of bytes sent
 // ====================================================================
-inline int Conn::Write(const char *p_buffer, int p_size) {
+inline int TcpConn::Write(const char *p_buffer, int p_size) {
   int err;
 
   // make sure the socket is connected first.
@@ -723,7 +723,7 @@ inline int Conn::Write(const char *p_buffer, int p_size) {
 // Purpose:     Attempts to recieve data from a socket, and returns the
 //              amount of data received.
 // ====================================================================
-inline int Conn::Read(char *p_buffer, int p_size, long timeout) {
+inline int TcpConn::Read(char *p_buffer, int p_size, long timeout) {
   int err = 0;
 
   // make sure the socket is connected first.
@@ -751,7 +751,7 @@ inline int Conn::Read(char *p_buffer, int p_size, long timeout) {
 // Function:    Close
 // Purpose:     closes the socket.
 // ====================================================================
-inline void Conn::Close() {
+inline void TcpConn::Close() {
   if (m_connected == true) {
     shutdown(m_sock, 2);
   }
@@ -767,13 +767,13 @@ inline void Conn::Close() {
 // Purpose:     A variation of the BasicSocket base class that handles
 //              incomming TCP/IP connection requests.
 // ========================================================================
-class Server : public Socket {
+class TcpServer : public Socket {
 public:
   // ====================================================================
   // Function:    Server
   // Purpose:     Constructor. Constructs the socket with initial values
   // ====================================================================
-  Server() { m_listening = false; }
+  TcpServer() { m_listening = false; }
 
   // ====================================================================
   // Function:    Listen
@@ -789,7 +789,7 @@ public:
   //              incomming connection and return a data socket with info
   //              about the new connection.
   // ====================================================================
-  Conn Accept() {
+  TcpConn Accept() {
     struct sockaddr_in socketaddress;
 
     // try to accept a connection
@@ -800,7 +800,7 @@ public:
     }
 
     // return the newly created socket.
-    return Conn(s);
+    return TcpConn(s);
   }
 
   // ====================================================================
@@ -831,7 +831,7 @@ protected:
 //              certain port
 // p_port:      This is the port that the socket will listen on.
 // ====================================================================
-inline void Server::Listen(port p_port) {
+inline void TcpServer::Listen(port p_port) {
   int err;
 
   // first try to obtain a socket descriptor from the OS, if

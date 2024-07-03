@@ -2,13 +2,13 @@
 #include <cstdio>
 
 int main(int argc, char const *argv[]) {
-  // libnet::Server listener;
+  // libnet::TcpServer listener;
   // listener.Listen(3300);
   // for (;;) {
-  //   libnet::Conn conn = listener.Accept();
+  //   libnet::TcpConn conn = listener.Accept();
   // }
   try {
-    libnet::Conn client;
+    libnet::TcpConn client;
     client.Dial("127.0.0.1", 12345);
     for (;;) {
       char buf[1024] = {0};

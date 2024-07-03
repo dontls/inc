@@ -340,7 +340,7 @@ inline const char *Format(int type) {
 
 #define PKG_LEN 2048
 
-class Client : libnet::Conn {
+class Client : libnet::TcpConn {
 private:
   libyte::Buffer rbuf_;
   libyte::Buffer dbuf_;
