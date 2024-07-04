@@ -2,6 +2,7 @@
 #include "buffer.hpp"
 #include "socket.hpp"
 #include "time.hpp"
+#include "crypto/base64.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -9,19 +10,21 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include <map>
 #include <functional>
 
-#define DBG printf
-#define AUTHORIZAION 1
+#define Debug printf
+#define SUPPORT_DIGEST 1
 
-#if AUTHORIZAION
+#if SUPPORT_DIGEST
 #include "crypto/md5.h"
-#include "crypto/base64.h"
 #endif
 
 namespace librtsp {
 
-inline std::string getItemVar(std::string &str, const char *s, const char *e) {
+static char _nalu_header[] = {0x00, 0x00, 0x00, 0x01};
+
+inline std::string FindVar(std::string &str, const char *s, const char *e) {
   auto p0 = str.find(s);
   if (p0 == std::string::npos) {
     return "";
@@ -29,7 +32,7 @@ inline std::string getItemVar(std::string &str, const char *s, const char *e) {
   p0 += strlen(s);
   auto p1 = str.find(e, p0);
   if (p1 == std::string::npos) {
-    return "";
+    return str.substr(p0);
   }
   return str.substr(p0, p1 - p0);
 }
@@ -94,23 +97,25 @@ inline bool url::Parse(const char *uri) {
 inline void url::SetAuth(std::string s) {
   if (s.find("Basic") != std::string::npos) {
     baseAuth = "Authorization: Basic ";
-  } else {
-    realm = getItemVar(s, "realm=\"", "\"");
-    nonce = getItemVar(s, "nonce=\"", "\"");
-    baseAuth = "Authorization: Digest ";
-    baseAuth += ("username=\"" + user);
-    baseAuth += ("\", realm=\"" + realm);
-    baseAuth += ("\", nonce=\"" + nonce);
-    baseAuth += ("\", uri=\"" + path + "\"");
+    return;
   }
+#ifdef SUPPORT_DIGEST
+  realm = FindVar(s, "realm=\"", "\"");
+  nonce = FindVar(s, "nonce=\"", "\"");
+  baseAuth = "Authorization: Digest ";
+  baseAuth += ("username=\"" + user);
+  baseAuth += ("\", realm=\"" + realm);
+  baseAuth += ("\", nonce=\"" + nonce);
+  baseAuth += ("\", uri=\"" + path + "\"");
+#endif
 }
 
 inline std::string url::GetAuth(std::string type) {
   if (!baseAuth.empty()) {
-#ifdef AUTHORIZAION
     if (baseAuth.find("Basic") != std::string::npos) {
       return baseAuth + base64_encode(user + ":" + password);
     }
+#ifdef SUPPORT_DIGEST
     std::string hex = md5::md5_hash_hex(user + ":" + realm + ":" + password);
     hex += (":" + nonce + ":" + md5::md5_hash_hex(type + ":" + this->path));
     return baseAuth + (", response=\"" + md5::md5_hash_hex(hex) + "\"\r\n");
@@ -121,35 +126,66 @@ inline std::string url::GetAuth(std::string type) {
 
 struct sdp {
   std::string session;
-  int i;
-  struct {
+  struct media {
     int format; // 96 /98
     std::string rtpmap;
     std::string sprops;
     std::string id;
-  } control[3];
+  };
+  std::string spsvalue;
+  std::vector<media> medias;
+  std::map<int, std::string> formats;
   void Parse(std::vector<std::string> &ss);
 };
 
 inline void sdp::Parse(std::vector<std::string> &ss) {
-  i = -1;
+  media *it = nullptr;
   for (size_t j = 0; j < ss.size(); j++) {
     std::string &s = ss[j];
     size_t pos = s.find("Session: ");
     if (pos != std::string::npos) {
       session = s.substr(9);
     } else if ((pos = s.find("m=")) != std::string::npos) {
-      i++;
-    } else if (i >= 0) {
+      medias.resize(medias.size() + 1);
+      it = &medias.back();
+    } else if (it != nullptr) {
       if ((pos = s.find("a=rtpmap:")) != std::string::npos) {
         std::istringstream sline(s.c_str() + 9);
-        sline >> control[i].format >> control[i].rtpmap;
+        sline >> it->format >> it->rtpmap;
+        if ((pos = it->rtpmap.find_first_of("/")) != std::string::npos) {
+          formats[it->format] = it->rtpmap.substr(0, pos);
+        }
       } else if ((pos = s.find("sprop")) != std::string::npos) {
-        control[i].sprops = s.substr(pos);
+        it->sprops = s.substr(pos);
       } else if ((pos = s.find("a=control:")) != std::string::npos) {
-        control[i].id = s.substr(pos + 10);
+        it->id = s.substr(pos + 10);
       }
     }
+  }
+  auto &m = medias[0];
+  if (m.rtpmap.find("H264") != std::string::npos) {
+    // sprop-parameter-sets=
+    std::string sps = FindVar(m.sprops, "sprop-parameter-sets=", ",");
+    std::string pps = FindVar(m.sprops, ",", ",");
+    if (!sps.empty()) {
+      spsvalue = std::string(_nalu_header, 4);
+      spsvalue.append(base64_decode(sps));
+      spsvalue.append(_nalu_header, 4);
+      spsvalue.append(base64_decode(pps));
+    }
+    return;
+  }
+  // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
+  std::string vps = FindVar(m.sprops, "vps=", ";");
+  std::string sps = FindVar(m.sprops, "sps=", ";");
+  std::string pps = FindVar(m.sprops, "pps=", ";");
+  if (!sps.empty()) {
+    spsvalue = std::string(_nalu_header, 4);
+    spsvalue.append(base64_decode(sps));
+    spsvalue.append(_nalu_header, 4);
+    spsvalue.append(base64_decode(pps));
+    spsvalue.append(_nalu_header, 4);
+    spsvalue.append(base64_decode(vps));
   }
 }
 
@@ -159,9 +195,6 @@ inline uint32_t GetUint32(uint8_t *b) {
   return uint32_t(b[0]) << 24 | uint32_t(b[0]) << 16 | uint32_t(b[2]) << 8 |
          b[3];
 }
-
-static char nalu[] = {0x00, 0x00, 0x00, 0x01};
-
 struct rtp {
   /* byte 0 */
   uint8_t csrcLen : 4;
@@ -198,56 +231,63 @@ inline void rtp::Unmarshal(uint8_t *b, int len) {
   this->size = len - 12;
 }
 
-static uint8_t Unmarshal264(rtp *r, libyte::Buffer &b) {
-  uint8_t sflag = 0;
-  uint8_t ntype = r->data[1];
-  if ((r->data[0] & 0x1f) == 28) {
+static uint8_t Unmarshal264(sdp &s, rtp *r, libyte::Buffer &b) {
+  uint8_t sflag = 0, ntype = r->data[1], flag = r->data[0] & 0x1f;
+  if (flag == 28) {
     sflag = (ntype & 0x80) | (ntype & 0x40);
     ntype -= sflag;
-    // 开始或这单独结束包
-    if (sflag & 0x80 || b.Empty()) {
-      b.Write(nalu, 4);
-      b.Write((uint8_t)(ntype | 0x60));
-    }
     r->data += 2;
     r->size -= 2;
   } else {
-    b.Write(nalu, 4);
+    b.Write(_nalu_header, 4);
     ntype = r->data[0];
   }
-  b.Write((char *)r->data, r->size);
   ntype = ntype & 0x1F;
+  // 开始或这单独结束包
+  if (flag == 28 && sflag & 0x80) {
+    // rtp中无sps
+    if (ntype == 5 && b.Empty()) {
+      b.Write(s.spsvalue);
+    }
+    uint8_t v = ntype | 0x60;
+    b.Write(_nalu_header, 4);
+    b.Write(v);
+  }
+  b.Write((char *)r->data, r->size);
   if (r->marker == 1 && (ntype == 1 || ntype == 5)) {
     sflag = 0x40;
   }
+  // printf("rtp size %d %ld\n", r->size, b.Len());
   return sflag;
 }
 
 // NOTE. sps/vps/pps没有和i帧合并
-static uint8_t Unmarshal265(rtp *r, libyte::Buffer &b) {
-  uint8_t sflag = 0;
-  uint8_t flag = r->data[0] >> 1;
-  uint8_t ntype = 0;
+static uint8_t Unmarshal265(sdp &s, rtp *r, libyte::Buffer &b) {
+  uint8_t sflag = 0, ntype = 0, flag = r->data[0] >> 1;
   if (flag == 49) {
     ntype = r->data[2];
     sflag = (ntype & 0x80) | (ntype & 0x40);
     ntype -= sflag;
-    // 开始或这单独结束包
-    if (sflag & 0x80 || b.Empty()) {
-      b.Write(nalu, 4);
-      ntype = ntype << 1;
-      b.Write(ntype);
-      b.Write((uint8_t)0x01);
-    }
     r->data += 3;
     r->size -= 3;
   } else {
     ntype = r->data[0];
-    b.Write(nalu, 4);
+    b.Write(_nalu_header, 4);
   }
-  b.Write((char *)r->data, r->size);
-  // printf("%d 0x%02x\n", flag, sflag);
+  // 开始或这单独结束包
+  if (flag == 49 && sflag & 0x80) {
+    ntype = ntype << 1;
+    uint8_t t = (ntype & 0x7e) >> 1;
+    if (t == 19 && b.Empty()) {
+      b.Write(s.spsvalue);
+    }
+    b.Write(_nalu_header, 4);
+    b.Write(ntype);
+    b.Write((uint8_t)0x01);
+  }
   ntype = (ntype & 0x7e) >> 1;
+  b.Write((char *)r->data, r->size);
+  // printf("rtp size %d %ld\n", r->size, b.Len());
   if (r->marker == 1 && (ntype == 1 || ntype == 19)) {
     sflag = 0x40;
   }
@@ -273,13 +313,13 @@ inline const char *Format(int type) {
     return "OPTIONS %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "%s" // Authorization
-           "User-Agent: myrtsp\r\n"
+           "User-Agent: \r\n"
            "\r\n";
   case DESCRIBE:
     return "DESCRIBE %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "%s" // Authorization
-           "User-Agent: myrtsp\r\n"
+           "User-Agent: \r\n"
            "Accept: application/sdp\r\n"
            "\r\n";
   case SETUP:
@@ -287,7 +327,7 @@ inline const char *Format(int type) {
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "%s" // Authorization
-           "User-Agent: myrtsp\r\n"
+           "User-Agent: \r\n"
            "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n"
            "\r\n";
   case PLAY:
@@ -295,7 +335,7 @@ inline const char *Format(int type) {
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "%s" // Authorization
-           "User-Agent: myrtsp\r\n"
+           "User-Agent: \r\n"
            "Range: npt=0.000-\r\n"
            "\r\n";
   case PAUSE:
@@ -316,7 +356,7 @@ inline const char *Format(int type) {
     return "SET_PARAMETER %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "Session: %s\r\n"
-           "User-Agent: myrtsp\r\n"
+           "User-Agent: \r\n"
            "Content-length: %d\r\n\r\n"
            "%s: %s\r\n";
   case GET_PARAMETER:
@@ -324,13 +364,13 @@ inline const char *Format(int type) {
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "%s"
-           "User-Agent: myrtsp\r\n"
+           "User-Agent: \r\n"
            "\r\n";
   case TEARDOWN:
     return "TEARDOWN %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "Session: %s\r\n"
-           "User-Agent: myrtsp\r\n"
+           "User-Agent: \r\n"
            "\r\n";
   default:
     break;
@@ -342,21 +382,27 @@ inline const char *Format(int type) {
 
 class Client : libnet::TcpConn {
 private:
+  int cmd_;
+  int seq_;
+  uint8_t atype_; // audio rtp type
+  rtp rtp_;
+  url url_;
+  sdp sdp_;
   libyte::Buffer rbuf_;
   libyte::Buffer dbuf_;
-  int cmdType_;
-  int seq_ = 0;
-  sdp sdp_;
-  url url_;
-  rtp rtp_;
-  std::function<uint8_t(rtp *, libyte::Buffer &)> decode_;
+  std::function<uint8_t(sdp &, rtp *, libyte::Buffer &)> decode_;
 
 public:
-  Client(/* args */) {}
+  Client(bool hasAudio = false) : cmd_(0), seq_(0), atype_(0), rtp_{0} {
+    if (hasAudio) {
+      atype_ = 0xff;
+    }
+  }
   ~Client() { Close(); }
-
+  using FrameCallack =
+      std::function<void(const char *format, char *data, int length)>;
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
-  bool Play(const char *sUrl) {
+  bool Play(const char *sUrl, FrameCallack callback = nullptr) {
     if (url_.Parse(sUrl) == false) {
       return false;
     }
@@ -381,16 +427,21 @@ public:
               break;
             }
             rtp_.Unmarshal(b + 4, dlen);
-            uint8_t code = 0x40;
-            if (rtp_.payloadType == 96) {
-              code = decode_(&rtp_, dbuf_);
-            } else if (rtp_.payloadType == 72) {
-              code = 0;
-            } else {
+            uint8_t code = 0;
+            if (rtp_.payloadType == 96 || rtp_.payloadType == 98) {
+              code = this->decode_(sdp_, &rtp_, dbuf_);
+            } else if (rtp_.payloadType == atype_) {
+              code = 0x40;
               dbuf_.Write((char *)rtp_.data, rtp_.size);
             }
             if (code & 0x40) {
-              DBG("%ld channel %d, %ld\n", ts, ch, dbuf_.Len());
+              auto fmt = sdp_.formats[rtp_.payloadType];
+              if (callback) {
+                callback(fmt.c_str(), dbuf_.Bytes(), dbuf_.Len());
+              } else {
+                Debug("rtp type %d channel %d, %ld\n", rtp_.payloadType, ch,
+                      dbuf_.Len());
+              }
               dbuf_.Reset(0);
             }
             rbuf_.Remove(dlen + 4);
@@ -406,7 +457,7 @@ public:
         }
       }
     } catch (libnet::Exception &e) {
-      DBG("%s\n", e.PrintError());
+      Debug("%s\n", e.PrintError());
     }
     return true;
   }
@@ -415,9 +466,9 @@ private:
   template <class... Args> void doWriteCmd(int type, Args... args) {
     char buf[PKG_LEN] = {0};
     sprintf(buf, Format(type), url_.path.c_str(), args...);
-    DBG("\nwrite --> \n%s", buf);
+    Debug("\nwrite --> \n%s", buf);
     Write(buf, strlen(buf));
-    cmdType_ = type;
+    cmd_ = type;
   }
 
   void doRtspParse(char *b) {
@@ -429,8 +480,8 @@ private:
     }
     int len = ptr - b;
     b[len - 1] = '\0';
-    DBG("%d read --> \n%s", len, b);
-    switch (cmdType_) {
+    Debug("%d read --> \n%s", len, b);
+    switch (cmd_) {
     case OPTIONS: {
       auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
         return s.find("WWW-Authenticate") != std::string::npos;
@@ -441,35 +492,44 @@ private:
         url_.SetAuth(it->c_str());
         doWriteCmd(OPTIONS, seq_++, url_.GetAuth("OPTIONS").c_str());
       }
-      rbuf_.Reset(0);
-      return;
+      break;
     };
     case DESCRIBE: {
       sdp_.Parse(res);
       this->decode_ = Unmarshal264;
-      if (sdp_.control[0].rtpmap.find("H265") != std::string::npos) {
+      if (sdp_.medias[0].rtpmap.find("H265") != std::string::npos) {
         this->decode_ = Unmarshal265;
       }
-      doWriteCmd(SETUP, sdp_.control[0].id.c_str(), seq_++,
-                 sdp_.session.c_str(), url_.GetAuth("SETUP").c_str());
-      if (sdp_.i > 1) {
-        cmdType_ = SETAUDIO;
+      doWriteCmd(SETUP, sdp_.medias[0].id.c_str(), seq_++, sdp_.session.c_str(),
+                 url_.GetAuth("SETUP").c_str());
+      if (atype_ == 0xff) {
+        cmd_ = SETAUDIO;
       }
-      rbuf_.Reset(0);
-      return;
+      break;
     };
     case SETUP:
       doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
                  url_.GetAuth("PLAY").c_str());
-      rbuf_.Reset(0);
-      return;
-    case SETAUDIO:
-      doWriteCmd(SETUP, sdp_.control[1].id.c_str(), seq_++,
-                 sdp_.session.c_str(), url_.GetAuth("SETUP").c_str());
-      rbuf_.Reset(0);
+      break;
+    case SETAUDIO: {
+      auto it = std::find_if(sdp_.medias.begin(), sdp_.medias.end(),
+                             [](sdp::media &m) {
+                               return m.id.find("audio") != std::string::npos;
+                             });
+      if (it == sdp_.medias.end()) {
+        doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
+                   url_.GetAuth("PLAY").c_str());
+      } else {
+        atype_ = it->format;
+        doWriteCmd(SETUP, it->id.c_str(), seq_++, sdp_.session.c_str(),
+                   url_.GetAuth("SETUP").c_str());
+      }
+    } break;
+    default:
+      rbuf_.Remove(len);
       return;
     }
-    rbuf_.Remove(len);
+    rbuf_.Reset(0);
   }
 };
 
