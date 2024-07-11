@@ -1,14 +1,6 @@
 #pragma once
-// byte.h
-// 实现大小端存储读取
-typedef char s8;
-typedef unsigned char u8;
-typedef short s16;
-typedef unsigned short u16;
-typedef int s32;
-typedef unsigned int u32;
-typedef long long s64;
-typedef unsigned long long u64;
+#include "types.h"
+// 实现大小端存储读
 
 namespace libyte {
 
@@ -69,23 +61,23 @@ inline u8 *AppendBeU64(u8 *dest, u64 n) {
   return dest + 8;
 }
 
-inline u8 U8(u8 *b, s32 &i) {
+inline u8 U8(u8 *b, i32 &i) {
   u8 r = b[i++];
   return r;
 }
-inline u16 LeU16(u8 *b, s32 &i) {
+inline u16 LeU16(u8 *b, i32 &i) {
   u16 r = b[i++];
   r |= u16(b[i++]) << 8;
   return r;
 }
-inline u32 LeU32(u8 *b, s32 &i) {
+inline u32 LeU32(u8 *b, i32 &i) {
   u32 r = b[i++];
   r |= u32(b[i++]) << 8;
   r |= u32(b[i++]) << 16;
   r |= u32(b[i++]) << 24;
   return r;
 }
-inline u64 LeU64(u8 *b, s32 &i) {
+inline u64 LeU64(u8 *b, i32 &i) {
   u64 r = b[i++];
   r |= u64(b[i++]) << 8;
   r |= u64(b[i++]) << 16;
@@ -97,13 +89,13 @@ inline u64 LeU64(u8 *b, s32 &i) {
   return r;
 }
 
-inline u16 BeU16(u8 *b, s32 &i) {
+inline u16 BeU16(u8 *b, i32 &i) {
   u16 r = u16(b[i++]) << 8;
   r |= u16(b[i++]);
   return r;
 }
 
-inline u32 BeU32(u8 *b, s32 &i) {
+inline u32 BeU32(u8 *b, i32 &i) {
   u32 r = u32(b[i++]) << 24;
   r |= u32(b[i++]) << 16;
   r |= u32(b[i++]) << 8;
@@ -111,7 +103,7 @@ inline u32 BeU32(u8 *b, s32 &i) {
   return r;
 }
 
-inline u64 BeU64(u8 *b, s32 &i) {
+inline u64 BeU64(u8 *b, i32 &i) {
   u64 r = u64(b[i++]) << 56;
   r |= u64(b[i++]) << 48;
   r |= u64(b[i++]) << 40;
@@ -180,4 +172,3 @@ inline u64 BeU64(u8 *b, s32 &i) {
     p += 8;                                                                    \
     r;                                                                         \
   })
-  

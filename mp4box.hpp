@@ -1,6 +1,6 @@
 #pragma once
 
-#include "byte.hpp"
+#include "types.h"
 #include "sps.hpp"
 #include <cassert>
 #include <cstddef>
