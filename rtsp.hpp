@@ -249,9 +249,8 @@ static uint8_t Unmarshal264(sdp &s, rtp *r, libyte::Buffer &b) {
     if (ntype == 5 && b.Empty()) {
       b.Write(s.spsvalue);
     }
-    uint8_t v = ntype | 0x60;
     b.Write(_nalu_header, 4);
-    b.Write(v);
+    b.Write(ntype | 0x60);
   }
   b.Write((char *)r->data, r->size);
   if (r->marker == 1 && (ntype == 1 || ntype == 5)) {
@@ -283,7 +282,7 @@ static uint8_t Unmarshal265(sdp &s, rtp *r, libyte::Buffer &b) {
     }
     b.Write(_nalu_header, 4);
     b.Write(ntype);
-    b.Write((uint8_t)0x01);
+    b.Write(0x01);
   }
   ntype = (ntype & 0x7e) >> 1;
   b.Write((char *)r->data, r->size);

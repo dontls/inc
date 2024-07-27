@@ -32,40 +32,32 @@ public:
     }
   }
 
+  // 空
   bool Empty() { return offset_ == 0; }
-
+  // 容量
   size_t Cap() { return total_; }
-
+  // 数据长度
   size_t Len() { return offset_; }
-
+  // 数据
   char *Bytes() { return ptr_; }
-
   // 写入指定长度
   size_t Write(char *p, size_t n) {
     assert(NULL != p || n > 0);
-    return tryWriteByRealloc(p, n);
+    return tryGrowWrite(p, n);
   }
+  // 写入
   size_t Write(const char *s) {
     assert(NULL != s);
-    return tryWriteByRealloc((char *)s, strlen(s));
+    return tryGrowWrite((char *)s, strlen(s));
   }
-  // 写入单个字节
-  size_t Write(uint8_t c) { return Write((char *)&c, 1); }
-  //
-  size_t Write(uint16_t n) { return Write((char *)&n, 2); }
-  //
-  size_t Write(uint32_t n) { return Write((char *)&n, 4); }
-  //
-  size_t Write(uint64_t n) { return Write((char *)&n, 8); }
+  // 写入
+  template <typename T> size_t Write(T b) {
+    return Write((char *)&b, sizeof(T));
+  }
   // 写入Buffer
   size_t Write(Buffer *b) { return Write(b->Bytes(), b->Len()); }
   // 写入字符串
-  size_t Write(std::string &s) {
-    if (s.length() == 0) {
-      return 0;
-    }
-    return Write((char *)s.c_str(), s.length());
-  }
+  size_t Write(std::string &s) { return Write((char *)s.c_str(), s.length()); }
   // 读数据
   size_t Read(char *p, size_t n) {
     assert(NULL != p && n > 0);
@@ -85,6 +77,7 @@ public:
     ::memmove(ptr_, ptr_ + s, offset_);
     return s;
   }
+  // 修改容量
   void Realloc(size_t n, bool force = false) {
     std::lock_guard<std::mutex> lock(lock_);
     offset_ = 0;
@@ -100,7 +93,7 @@ private:
   Buffer(const Buffer &) = delete;
   Buffer &operator=(const Buffer &) = delete;
 
-  size_t tryWriteByRealloc(char *p, size_t n) {
+  size_t tryGrowWrite(char *p, size_t n) {
     std::lock_guard<std::mutex> lock(lock_);
     size_t s = offset_ + n;
     if (s > total_) {
@@ -116,9 +109,11 @@ private:
   size_t tryRead(char *p, size_t n) {
     std::lock_guard<std::mutex> lock(lock_);
     size_t readSize = n < offset_ ? n : offset_;
-    ::memcpy(p, ptr_, readSize);
-    offset_ -= readSize;
-    ::memmove(ptr_, ptr_ + readSize, offset_);
+    if (readSize > 0) {
+      ::memcpy(p, ptr_, readSize);
+      offset_ -= readSize;
+      ::memmove(ptr_, ptr_ + readSize, offset_);
+    }
     return readSize;
   }
 };
