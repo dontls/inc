@@ -15,15 +15,20 @@
 
 namespace libtime {
 // 格式化时间
-inline std::string Format(std::time_t t = 0) {
-  if (t == 0) {
+inline std::string Format(long long t = 0) {
+  if (t >= 1e15) {
+    t /= 1000000;
+  } else if (t >= 1e12) {
+    t /= 1000;
+  } else if (t == 0) {
     t = time(NULL);
   }
+  std::time_t t0 = t;
   struct tm timeinfo = {0};
 #ifdef _WIN32
-  localtime_s(&timeinfo, &t);
+  localtime_s(&timeinfo, &t0);
 #else
-  localtime_r(&t, &timeinfo);
+  localtime_r(&t0, &timeinfo);
 #endif
   char szText[24] = {0};
   strftime(szText, sizeof(szText), "%Y-%m-%d %H:%M:%S", &timeinfo);
