@@ -390,36 +390,41 @@ inline int decode_sps(BYTE *buf, unsigned int nLen, UINT &width, UINT &height,
 // 返回nalu结束位置, 包含nalu头
 
 namespace nalu {
+
 struct Value {
   int type;
   int size;
   char *data;
 };
+typedef std::vector<Value> Vector;
+
+#define FIXED_LEN 4
 
 // 返回下个nalu开始的位置，length剩余数据长度
-inline char *Split(char *data, size_t &length, std::vector<Value> &nalus) {
+inline char *Split(char *data, size_t &length, Vector &nalus) {
   if (length <= 0) {
     return nullptr;
   }
   char *ptr = data;
-  size_t i = 7;
-  for (; i < length; i++) {
-    if (ptr[i] == 0x01 && ptr[i - 1] == 0x00 && ptr[i - 2] == 0x00 &&
-        ptr[i - 3] == 0x00) {
+  size_t i = FIXED_LEN;
+  for (; (i + FIXED_LEN) < length; i++) {
+    if (ptr[i] == 0x00 && ptr[i + 1] == 0x00 && ptr[i + 2] == 0x00 &&
+        ptr[i + 3] == 0x01) {
       break;
     }
   }
   // 最后一个
-  if (i >= length) {
-    return ptr;
+  if ((i + FIXED_LEN) >= length) {
+    length -= FIXED_LEN;
+    return ptr + FIXED_LEN;
   }
-  Value u;
-  u.data = ptr;
-  u.type = ptr[4];
-  u.size = i - 3;
-  nalus.push_back(u);
-  length -= u.size;
-  return Split(ptr + u.size, length, nalus);
+  Value v;
+  v.data = ptr + FIXED_LEN;
+  v.size = i - FIXED_LEN;
+  v.type = v.data[0];
+  nalus.emplace_back(v);
+  length -= i;
+  return Split(ptr + i, length, nalus);
 } // namespace nalu
-
+inline bool IsH264(char b) { return (b & 0xf0) == 0x60; }
 } // namespace nalu

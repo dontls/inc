@@ -22,11 +22,11 @@ public:
   int WriteVideo(int64_t ts, bool iskey, char *data, size_t len);
 
 private:
-  size_t WriteBoxFtyp(std::vector<nalu::Value> &nalus);
+  size_t WriteBoxFtyp(nalu::Vector &nalus);
   size_t WriteBoxMoov();
 };
 
-inline size_t Writer::WriteBoxFtyp(std::vector<nalu::Value> &nalus) {
+inline size_t Writer::WriteBoxFtyp(nalu::Vector &nalus) {
   box::ftyp ftyp;
   ftyp.compat3 = trakv_.MakeVideo(nalus);
   mdat_.type = Le32Type("mdat");
@@ -62,7 +62,7 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
   if (file_ == NULL) {
     return -1;
   }
-  std::vector<nalu::Value> nalus;
+  nalu::Vector nalus;
   char *ptr = nalu::Split(data, len, nalus);
   if (iskey && mdat_.type == 0) {
     WriteBoxFtyp(nalus);
@@ -71,10 +71,10 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
     return 0;
   }
   // stbl信息
-  trakv_.AppendSample(ts, mdat_.size, len);
+  trakv_.AppendSample(ts, mdat_.size, len + 4);
   // mdat数据
-  uint32_t slen = Htobe32(len - 4);
+  uint32_t slen = Htobe32(len);
   fwrite(&slen, sizeof(uint32_t), 1, file_);
-  return fwrite(ptr + 4, len - 4, 1, file_);
+  return fwrite(ptr, len, 1, file_);
 }
 } // namespace libmp4

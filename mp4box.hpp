@@ -484,27 +484,26 @@ struct avcc {
   u8 *pps;
 };
 
-inline int AvccMarshal(char *buf, std::string &sps, std::string &pps) {
-  u32 spslen = sps.length(), ppslen = pps.length();
+inline int AvccMarshal(char *buf, nalu::Value &sps, nalu::Value &pps) {
   // 附加avcc信息
   avcc *avc = (avcc *)(buf);
   avc->type = Le32Type("avcC");
   avc->config_ver = 1;
-  avc->avc_profile = spslen > 1 ? sps[1] : 0;
-  avc->profile_compat = spslen > 2 ? sps[2] : 0;
-  avc->avc_level = spslen > 3 ? sps[3] : 0;
+  avc->avc_profile = sps.size > 1 ? sps.data[1] : 0;
+  avc->profile_compat = sps.size > 2 ? sps.data[2] : 0;
+  avc->avc_level = sps.size > 3 ? sps.data[3] : 0;
   avc->nalulen = 0xFF;
   int i = offsetof(avcc, sps_num);
   buf[i++] = char((0x7 << 5) | (1 << 0));
-  buf[i++] = (spslen << 8) & 0xff;
-  buf[i++] = spslen & 0xff;
-  ::memcpy(&buf[i], sps.c_str(), spslen);
-  i += spslen;
+  buf[i++] = (sps.size << 8) & 0xff;
+  buf[i++] = sps.size & 0xff;
+  ::memcpy(&buf[i], sps.data, sps.size);
+  i += sps.size;
   buf[i++] = 1;
-  buf[i++] = (ppslen << 8) & 0xff;
-  buf[i++] = ppslen & 0xff;
-  ::memcpy(&buf[i], pps.c_str(), ppslen);
-  i += ppslen;
+  buf[i++] = (pps.size << 8) & 0xff;
+  buf[i++] = pps.size & 0xff;
+  ::memcpy(&buf[i], pps.data, pps.size);
+  i += pps.size;
   avc->size = Htobe32(i);
   return i;
 }
@@ -533,8 +532,8 @@ struct hvcc {
   u8 numOfArrays;
 };
 
-inline int HvccMarshal(char *buf, std::string &sps, std::string &pps,
-                       std::string &vps) {
+inline int HvccMarshal(char *buf, nalu::Value &sps, nalu::Value &pps,
+                       nalu::Value &vps) {
   hvcc *hvc = (hvcc *)(buf);
   hvc->type = Le32Type("hvcC");
   hvc->configurationVersion = 1;
@@ -558,30 +557,29 @@ inline int HvccMarshal(char *buf, std::string &sps, std::string &pps,
   hvc->lengthSizeMinusOne = 3;
   hvc->numOfArrays = 3;
   int i = sizeof(hvcc);
-  u32 spslen = sps.length(), ppslen = pps.length(), vpslen = vps.length();
   buf[i++] = 32;
   buf[i++] = 0x00;
   buf[i++] = 0x01;
-  buf[i++] = (vpslen >> 8) & 0xff;
-  buf[i++] = vpslen & 0xff;
-  memcpy(&buf[i], vps.c_str(), vpslen);
-  i += vpslen;
+  buf[i++] = (vps.size >> 8) & 0xff;
+  buf[i++] = vps.size & 0xff;
+  memcpy(&buf[i], vps.data, vps.size);
+  i += vps.size;
 
   buf[i++] = 33;
   buf[i++] = 0x00;
   buf[i++] = 0x01;
-  buf[i++] = (spslen >> 8) & 0xff;
-  buf[i++] = spslen & 0xff;
-  memcpy(&buf[i], sps.c_str(), spslen);
-  i += spslen;
+  buf[i++] = (sps.size >> 8) & 0xff;
+  buf[i++] = sps.size & 0xff;
+  memcpy(&buf[i], sps.data, sps.size);
+  i += sps.size;
 
   buf[i++] = 34;
   buf[i++] = 0x00;
   buf[i++] = 0x01;
-  buf[i++] = (ppslen >> 8) & 0xff;
-  buf[i++] = ppslen & 0xff;
-  memcpy(&buf[i], pps.c_str(), ppslen);
-  i += ppslen;
+  buf[i++] = (pps.size >> 8) & 0xff;
+  buf[i++] = pps.size & 0xff;
+  memcpy(&buf[i], pps.data, pps.size);
+  i += pps.size;
   hvc->size = Htobe32(i);
   return i;
 }
@@ -608,7 +606,7 @@ public:
   Trak() : id_(0), trak_{0}, stbl{0}, firts_(0), lsts_(0), count_(0) {}
   ~Trak() {}
   void AppendSample(int64_t ts, u32 &offset, u32 length);
-  u32 MakeVideo(std::vector<nalu::Value> &nalus);
+  u32 MakeVideo(nalu::Vector &nalus);
   u32 MakeAudio(char *accspec);
   int Marshal();
   u32 Duration() { return Htobe32(lsts_ - firts_); }
@@ -648,24 +646,22 @@ inline int Trak::Marshal() {
   return size + sizeof(box::trak);
 }
 
-inline u32 Trak::MakeVideo(std::vector<nalu::Value> &nalus) {
+inline u32 Trak::MakeVideo(nalu::Vector &nalus) {
   assert(id_ == 0);
   int fps = 0, n = 0;
   char buf[256] = {0};
-  std::string sps = std::string(nalus[0].data + 4, nalus[0].size - 4);
-  std::string pps = std::string(nalus[1].data + 4, nalus[1].size - 4);
+  nalu::Value &sps = nalus[0];
   box::stsdv stsd;
-  if (sps[0] == 0x67) {
+  if (nalu::IsH264(sps.type)) {
     stsd.avc1.type = Le32Type("avc1");
-    avc::decode_sps((BYTE *)sps.c_str(), sps.length(), trak_.tkhd.width,
+    avc::decode_sps((BYTE *)sps.data, sps.size, trak_.tkhd.width,
                     trak_.tkhd.height, fps);
-    n = AvccMarshal(buf, sps, pps);
+    n = AvccMarshal(buf, sps, nalus[1]);
   } else {
     stsd.avc1.type = Le32Type("hvc1");
-    std::string vps = std::string(nalus[2].data - 4, nalus[1].size - 4);
-    hevc::decode_sps((BYTE *)sps.c_str(), sps.length(), trak_.tkhd.width,
+    hevc::decode_sps((BYTE *)sps.data, sps.size, trak_.tkhd.width,
                      trak_.tkhd.height, fps);
-    n = HvccMarshal(buf, sps, pps, vps);
+    n = HvccMarshal(buf, sps, nalus[1], nalus[2]);
   }
   stsd.avc1.width = trak_.tkhd.width;
   stsd.avc1.height = trak_.tkhd.height;

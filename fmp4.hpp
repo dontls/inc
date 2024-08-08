@@ -135,7 +135,7 @@ public:
   int WriteVideo(int64_t ts, bool iskey, char *data, size_t len);
 
 private:
-  size_t WriteBoxFtypMoov(std::vector<nalu::Value> &nalus) {
+  size_t WriteBoxFtypMoov(nalu::Vector &nalus) {
     libmp4::box::ftyp ftyp = {0};
     libmp4::box::moov moov = {0};
     box::mvex mvex = {0};
@@ -166,7 +166,7 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
   if (file_ == NULL) {
     return -1;
   }
-  std::vector<nalu::Value> nalus;
+  nalu::Vector nalus;
   char *ptr = nalu::Split(data, len, nalus);
   if (iskey && firts_ == 0) {
     this->WriteBoxFtypMoov(nalus);
@@ -177,17 +177,17 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
   }
   // 写入moof
   moofv_.mfhd.sequenceNumber = libmp4::Htobe32(seq_++);
-  moofv_.mdatv.size = libmp4::Htobe32(len + sizeof(libmp4::box::mdat));
+  moofv_.mdatv.size = libmp4::Htobe32(len + 4 + sizeof(libmp4::box::mdat));
   moofv_.traf.tfdt.decode_time = libmp4::Htobe32(ts - firts_);
   moofv_.traf.trun.sample.duration = libmp4::Htobe32(ts - lsts_);
-  moofv_.traf.trun.sample.size = libmp4::Htobe32(len);
+  moofv_.traf.trun.sample.size = libmp4::Htobe32(len + 4);
   moofv_.traf.trun.sample.flags =
       libmp4::Htobe32(iskey ? 0x02000000 : 0x00010000);
   lsts_ = ts;
   fwrite(&moofv_, sizeof(box::moof), 1, file_);
   // 写入mdat
-  u32 slen = libmp4::Htobe32(len - 4);
+  u32 slen = libmp4::Htobe32(len);
   fwrite(&slen, sizeof(u32), 1, file_);
-  return fwrite(ptr + 4, len - 4, 1, file_);
+  return fwrite(ptr, len, 1, file_);
 }
 } // namespace libfmp4
