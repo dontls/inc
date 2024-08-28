@@ -1,27 +1,25 @@
 #pragma once
 
-#ifndef __COMM_FACTORY_H__
-#define __COMM_FACTORY_H__
-
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
 
+namespace libcomm {
 // T 需要传入基类
-template <typename T> class CFactory {
+template <typename T> class Factory {
 public:
   // N 子类，这里会把对应子类添加到Map中
   template <typename N> struct register_t {
     template <typename... Args>
     register_t(const std::string &key, Args... args) {
-      CFactory::Instance()->_map.emplace(key, [=] { return new N(args...); });
+      Factory::Instance()->_map.emplace(key, [=] { return new N(args...); });
     }
   };
 
   // 普通指针
   static auto NormalPtr(const std::string &key) -> T * {
-    return CFactory::Instance()->Find(key);
+    return Factory::Instance()->Find(key);
   }
 
   // unique_ptr指针
@@ -35,14 +33,14 @@ public:
   }
 
 private:
-  CFactory(){};
-  CFactory(const CFactory &) = delete;
-  CFactory(CFactory &&) = delete;
-  CFactory &operator=(const CFactory &) = delete;
+  Factory() {};
+  Factory(const Factory &) = delete;
+  Factory(Factory &&) = delete;
+  Factory &operator=(const Factory &) = delete;
 
   // 单例模式
-  static auto Instance() -> CFactory<T> * {
-    static CFactory<T> ins;
+  static auto Instance() -> Factory<T> * {
+    static Factory<T> ins;
     return &ins;
   }
 
@@ -55,14 +53,14 @@ private:
   }
   std::map<std::string, std::function<T *()>> _map;
 };
-#endif
+} // namespace libcomm
 
 // class B {
 // public:
 //     virtual void display() = 0;
 // };
 // 注册基类
-// #define AF_OBJECT CFactory<B>
+// #define AF_OBJECT Factory<B>
 
 // 注册子类，这里没有对继承关系进行判断，需要保证继承关系
 // #define REGISTER_AF_OBJECT_CLASS(CLASS, ...) AF_OBJECT::register_t<CLASS>

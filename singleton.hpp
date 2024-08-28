@@ -51,9 +51,9 @@
 // }
 
 // c++封装的单例模式
-namespace libsingle {
+namespace libcomm {
 
-template <typename T> class Object {
+template <typename T> class Singleton {
 public:
   static T &Instance() {
     static T ins;
@@ -61,10 +61,10 @@ public:
   }
 
 private:
-  explicit Object() = default;
-  Object(const Object &) = delete;
-  Object &operator=(const Object &) = delete;
-  ~Object() = default;
+  explicit Singleton() = default;
+  Singleton(const Singleton &) = delete;
+  Singleton &operator=(const Singleton &) = delete;
+  ~Singleton() = default;
 };
 
 } // namespace libsingle

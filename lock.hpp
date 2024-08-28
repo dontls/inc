@@ -2,7 +2,7 @@
 
 #include <pthread.h>
 
-namespace libthread {
+namespace libcomm {
 
 typedef pthread_mutex_t Mutex;
 
@@ -15,4 +15,4 @@ private:
   Mutex *lock_;
 };
 
-} // namespace libthread
+} // namespace libcomm

@@ -18,20 +18,20 @@
  * 因为有std::mutex和std::condition_variable类成员，所以此类型不支持复制构造函数也不支持赋值操作(=)
  */
 
-namespace libthread {
+namespace libcomm {
 template <typename T> class Queue {
 private:
   mutable std::mutex mtx;
   mutable std::condition_variable cv;
-  using queue_type = std::queue<T>;
-  queue_type data;
+  using _type = std::queue<T>;
+  _type data;
   Queue() = default;
   Queue(const Queue &) = delete;
   Queue &operator=(const Queue &) = delete;
 
 public:
-  using value_type = typename queue_type::value_type;
-  using container_type = typename queue_type::container_type;
+  using value_type = typename _type::value_type;
+  using container_type = typename _type::container_type;
 
   /**
    * @description: 使用迭代器为参数的构造函数，适用所有容器对象
@@ -112,4 +112,4 @@ public:
     return data.size();
   }
 };
-} // namespace libthread
+} // namespace libcomm
