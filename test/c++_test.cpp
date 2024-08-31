@@ -1,5 +1,6 @@
 #include "../singleton.hpp"
 #include "../channel.hpp"
+#include <cstddef>
 #include <iostream>
 #include <thread>
 #include <unistd.h>
@@ -15,21 +16,23 @@ int main(int argc, char const *argv[]) {
   libcomm::Singleton<A>::Instance().Display();
   libcomm::Singleton<A>::Instance().Display();
 
-  libcomm::Channel<int> chls(0);
+  libcomm::Channel<int> chls(1);
   std::thread t([&] {
+    sleep(2);
     for (const auto &it : chls) {
-      printf("read %d\n", it);
+      printf(":------> read %d\n", it);
     }
   });
   sleep(1);
   for (int i = 0; i < 8; i++) {
     chls << i;
-    printf("write %d\n", i);
+    printf(":---------> write %d\n", i);
   }
-  sleep(10);
-  for (int i = 5; i < 10; i++) {
+  sleep(3);
+  for (int i = 8; i < 15; i++) {
     chls << i;
-    printf("write %d\n", i);
+    usleep(10000);
+    printf(":---------> write %d\n", i);
   }
   chls.close();
   t.join();

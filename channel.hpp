@@ -1,6 +1,7 @@
 #pragma once
 // https://github.com/andreiavrammsd/cpp-channel
 
+#include <cassert>
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
@@ -43,11 +44,7 @@ public:
   /**
    * Makes iteration continue until the channel is closed and empty.
    */
-  bool operator!=(BlockingIterator<Channel>) const {
-    std::unique_lock<std::mutex> lock{chan_.mtx_};
-    chan_.waitBeforeRead(lock);
-    return !(chan_.closed() && chan_.empty());
-  }
+  bool operator!=(BlockingIterator<Channel>) const { return !chan_.closed(); }
 
 private:
   Channel &chan_;
@@ -69,26 +66,12 @@ private:
 #define NODISCARD
 #endif
 
-/**
- * @brief Exception thrown if trying to write on closed channel.
- */
-class ClosedChannel : public std::runtime_error {
-public:
-  explicit ClosedChannel(const char *msg) : std::runtime_error{msg} {}
-};
-
-/**
- * @brief Thread-safe container for sharing data between threads.
- *
- * Implements a blocking input iterator.
- *
- * @tparam T The type of the elements.
- */
+// 由写入方关闭Channel
 template <typename T> class Channel {
 public:
   using value_type = T;
   using iterator = BlockingIterator<Channel<T>>;
-  using size_type = std::size_t;
+  using size_type = std::int32_t;
 
   /**
    * Creates an unbuffered channel.
@@ -122,12 +105,16 @@ public:
   /**
    * Returns the number of elements in the channel.
    */
-  NODISCARD inline size_type constexpr size() const noexcept;
+  NODISCARD inline std::size_t constexpr size() const noexcept {
+    return queue_.size();
+  }
 
   /**
    * Returns true if there are no elements in channel.
    */
-  NODISCARD inline bool constexpr empty() const noexcept;
+  NODISCARD inline bool constexpr empty() const noexcept {
+    return queue_.empty();
+  }
 
   /**
    * Closes the channel.
@@ -142,8 +129,8 @@ public:
   /**
    * Iterator
    */
-  iterator begin() noexcept;
-  iterator end() noexcept;
+  iterator begin() noexcept { return BlockingIterator<Channel<T>>{*this}; }
+  iterator end() noexcept { return BlockingIterator<Channel<T>>{*this}; }
 
   /**
    * Channel cannot be copied or moved.
@@ -157,7 +144,7 @@ public:
 private:
   const size_type cap_{0};
   std::queue<T> queue_;
-  std::atomic<std::size_t> size_{0};
+  size_type size_{0};
   std::mutex mtx_;
   std::condition_variable cnd_;
   std::atomic<bool> is_closed_{false};
@@ -166,19 +153,21 @@ private:
     cnd_.wait(lock, [this]() { return !empty() || closed(); });
   }
   void waitBeforeWrite(std::unique_lock<std::mutex> &lock) {
-    cnd_.wait(lock, [this]() { return size_ <= cap_; });
+    cnd_.wait(lock, [this]() { return size_ < cap_; });
   }
   friend class BlockingIterator<Channel>;
 };
 
 template <typename T>
-constexpr Channel<T>::Channel(const size_type capacity) : cap_{capacity} {}
+constexpr Channel<T>::Channel(const size_type capacity) : cap_{capacity} {
+  assert(cap_ >= 0);
+}
 
 template <typename T>
 Channel<typename std::decay<T>::type> &
 operator<<(Channel<typename std::decay<T>::type> &ch, T &&in) {
   if (ch.closed()) {
-    throw ClosedChannel{"cannot write on closed channel"};
+    throw std::runtime_error{"cannot write on closed channel"};
   }
 
   {
@@ -187,7 +176,6 @@ operator<<(Channel<typename std::decay<T>::type> &ch, T &&in) {
     ch.queue_.push(std::forward<T>(in));
     ++ch.size_;
   }
-
   ch.cnd_.notify_one();
   return ch;
 }
@@ -196,29 +184,15 @@ template <typename T> Channel<T> &operator>>(Channel<T> &ch, T &out) {
   if (ch.closed() && ch.empty()) {
     return ch;
   }
-
-  {
-    std::unique_lock<std::mutex> lock{ch.mtx_};
-    ch.waitBeforeRead(lock);
-    if (!ch.empty()) {
-      out = std::move(ch.queue_.front());
-      ch.queue_.pop();
-      --ch.size_;
-    }
+  std::unique_lock<std::mutex> lock{ch.mtx_};
+  --ch.size_;
+  ch.cnd_.notify_one(); // 写入阻塞，唤醒
+  ch.waitBeforeRead(lock);
+  if (!ch.empty()) {
+    out = std::move(ch.queue_.front());
+    ch.queue_.pop();
   }
-
-  ch.cnd_.notify_one();
-
   return ch;
-}
-
-template <typename T>
-constexpr typename Channel<T>::size_type Channel<T>::size() const noexcept {
-  return size_;
-}
-
-template <typename T> constexpr bool Channel<T>::empty() const noexcept {
-  return size_ == 0;
 }
 
 template <typename T> void Channel<T>::close() noexcept {
@@ -231,14 +205,5 @@ template <typename T> void Channel<T>::close() noexcept {
 
 template <typename T> bool Channel<T>::closed() const noexcept {
   return is_closed_.load();
-}
-
-template <typename T>
-BlockingIterator<Channel<T>> Channel<T>::begin() noexcept {
-  return BlockingIterator<Channel<T>>{*this};
-}
-
-template <typename T> BlockingIterator<Channel<T>> Channel<T>::end() noexcept {
-  return BlockingIterator<Channel<T>>{*this};
 }
 } // namespace libcomm
