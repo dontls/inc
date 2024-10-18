@@ -71,9 +71,9 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
     return 0;
   }
   // stbl信息
-  trakv_.AppendSample(ts, mdat_.size, len + 4);
+  trakv_.AppendSample(ts, mdat_.size, u32(len + 4));
   // mdat数据
-  uint32_t slen = Htobe32(len);
+  uint32_t slen = Htobe32(u32(len));
   fwrite(&slen, sizeof(uint32_t), 1, file_);
   return fwrite(ptr, len, 1, file_);
 }

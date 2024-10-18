@@ -43,9 +43,9 @@ inline UINT Ue(BYTE *pBuff, UINT nLen, UINT &nStartBit) {
 inline int Se(BYTE *pBuff, UINT nLen, UINT &nStartBit) {
   int UeVal = Ue(pBuff, nLen, nStartBit);
   double k = UeVal;
-  int nValue = ceil(
+  int nValue = int(ceil(
       k /
-      2); // ceil函数：ceil函数的作用是求不小于给定实数的最小整数。ceil(2)=ceil(1.2)=cei(1.5)=2.00
+      2)); // ceil函数：ceil函数的作用是求不小于给定实数的最小整数。ceil(2)=ceil(1.2)=cei(1.5)=2.00
   if (UeVal % 2 == 0)
     nValue = -nValue;
   return nValue;
@@ -204,12 +204,12 @@ inline int decode_sps(BYTE *buf, unsigned int nLen, UINT &width, UINT &height,
     uint8_t sub_layer_profile_present_flag[6] = {0};
     uint8_t sub_layer_level_present_flag[6] = {0};
     for (int i = 0; i < sps_max_sub_layers_minus1; i++) {
-      sub_layer_profile_present_flag[i] = u(1, buf, StartBit);
-      sub_layer_level_present_flag[i] = u(1, buf, StartBit);
+      sub_layer_profile_present_flag[i] = uint8_t(u(1, buf, StartBit));
+      sub_layer_level_present_flag[i] = uint8_t(u(1, buf, StartBit));
     }
     if (sps_max_sub_layers_minus1 > 0) {
       for (int i = sps_max_sub_layers_minus1; i < 8; i++) {
-        uint8_t reserved_zero_2bits = u(2, buf, StartBit);
+        uint8_t reserved_zero_2bits = uint8_t(u(2, buf, StartBit));
       }
     }
     for (int i = 0; i < sps_max_sub_layers_minus1; i++) {
@@ -420,7 +420,7 @@ inline char *Split(char *data, size_t &length, Vector &nalus) {
   }
   Value v;
   v.data = ptr + FIXED_LEN;
-  v.size = i - FIXED_LEN;
+  v.size = int(i - FIXED_LEN);
   v.type = v.data[0];
   nalus.emplace_back(v);
   length -= i;

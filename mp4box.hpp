@@ -609,7 +609,7 @@ public:
   u32 MakeVideo(nalu::Vector &nalus);
   u32 MakeAudio(char *accspec);
   int Marshal();
-  u32 Duration() { return Htobe32(lsts_ - firts_); }
+  u32 Duration() { return Htobe32(u32(lsts_ - firts_)); }
   const char *Value() { return str.c_str(); }
 };
 
@@ -617,7 +617,7 @@ inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length) {
   if (firts_ == 0) {
     firts_ = lsts_ = ts;
   }
-  value[0].emplace_back(Htobe32(ts - lsts_)); // stts
+  value[0].emplace_back(Htobe32(u32(ts - lsts_))); // stts
   value[1].emplace_back(Htobe32(1));          // stss
   value[2].emplace_back(Htobe32(length));     // stsz
   value[3].emplace_back(Htobe32(offset));     // stco
@@ -627,11 +627,11 @@ inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length) {
 }
 
 inline int Trak::Marshal() {
-  u32 dur = Htobe32(lsts_ - firts_);
+  u32 dur = Htobe32(u32(lsts_ - firts_));
   trak_.tkhd.duration = dur;
   trak_.mdia.mdhd.duration = dur;
   int samplesize = sizeof(u32) * count_;
-  u32 size = sizeof(stbl) + stsdv_.length() + samplesize * 4;
+  u32 size = u32(sizeof(stbl) + stsdv_.length() + samplesize * 4);
   str = std::string(trak_.Marshal(id_, size), sizeof(box::trak));
   str.append(stsdv_);
   str.append(stbl.stts.Marshal(count_), sizeof(box::stts));
