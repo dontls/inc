@@ -438,11 +438,10 @@ static WSInit wstup_;
 // ========================================================================
 class Socket {
 public:
-  int Create() {
+  void Create() {
     if (m_sock == INVALID_SOCKET) {
       m_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     }
-    return m_sock;
   }
 
   // ====================================================================
@@ -587,7 +586,7 @@ public:
   // Purpose:     Attempts to send data, and returns the number of
   //              of bytes sent
   // ====================================================================
-  int Write(const char *p_buffer, int p_size);
+  int Write(const char *p_buffer, int p_size, long timeout = 0);
 
   // ====================================================================
   // Function:    Receive
@@ -609,26 +608,28 @@ protected:
                                    // about the remote connection
 
 private:
-  int setReadDealTimeout(long timeout) {
-    if (timeout <= 0) {
-      return 0;
-    }
+  int setDealTimeout(long timeout, bool isread) {
     int err = -1;
     struct timeval tout;
     tout.tv_sec = timeout / 1000;
     tout.tv_usec = (timeout % 1000) * 1000;
-    fd_set fdRead;
-    int nSocket = m_sock + 1;
+    int nsocket = int(m_sock);
+#ifdef __linux__
+    nsocket += 1;
+#endif // __linux__
+    fd_set fd;
+    fd_set *fdr = NULL, *fdw = NULL;
+    isread ? fdr = &fd : fdw = &fd;
     while (1) {
-      FD_ZERO(&fdRead);
-      FD_SET(m_sock, &fdRead);
-      int rc = select(nSocket, &fdRead, NULL, NULL, &tout);
+      FD_ZERO(&fd);
+      FD_SET(m_sock, &fd);
+      int rc = select(nsocket, fdr, fdw, NULL, &tout);
       if (rc == -1) {
         if (EINTR == errno || EAGAIN == errno) {
           continue;
         }
       }
-      if (FD_ISSET(nSocket, &fdRead)) {
+      if (FD_ISSET(m_sock, &fd)) {
         err = 0;
       }
       break;
@@ -637,7 +638,8 @@ private:
   }
 };
 
-inline TcpConn::TcpConn(socket_t p_socket) : Socket(p_socket), m_connected(false) {
+inline TcpConn::TcpConn(socket_t p_socket)
+    : Socket(p_socket), m_connected(false) {
   if (p_socket != INVALID_SOCKET) {
     socklen_t s = sizeof(m_remoteinfo);
     getpeername(p_socket, (sockaddr *)(&m_remoteinfo), &s);
@@ -692,16 +694,18 @@ inline void TcpConn::Dial(const char *p_addr, port p_port) {
 // Purpose:     Attempts to send data, and returns the number of
 //              of bytes sent
 // ====================================================================
-inline int TcpConn::Write(const char *p_buffer, int p_size) {
-  int err;
+inline int TcpConn::Write(const char *p_buffer, int p_size, long timeout) {
 
   // make sure the socket is connected first.
   if (m_connected == false) {
     throw Exception(ENotConnected);
   }
 
+  if (timeout > 0 && setDealTimeout(timeout, false) < 0) {
+    throw Exception(ETimedOut);
+  }
   // attempt to send the data
-  err = send(m_sock, p_buffer, p_size, 0);
+  int err = send(m_sock, p_buffer, p_size, 0);
   if (err == -1) {
     Error e = GetError();
     if (e != EOperationWouldBlock) {
@@ -724,18 +728,15 @@ inline int TcpConn::Write(const char *p_buffer, int p_size) {
 //              amount of data received.
 // ====================================================================
 inline int TcpConn::Read(char *p_buffer, int p_size, long timeout) {
-  int err = 0;
-
   // make sure the socket is connected first.
   if (m_connected == false) {
     throw Exception(ENotConnected);
   }
-
-  if (setReadDealTimeout(timeout) < 0) {
-    return err;
+  if (timeout > 0 && setDealTimeout(timeout, true) < 0) {
+    throw Exception(ETimedOut);
   }
   // attempt to recieve the data
-  err = recv(m_sock, p_buffer, p_size, 0);
+  int err = recv(m_sock, p_buffer, p_size, 0);
   if (err == 0) {
     throw Exception(EConnectionClosed);
   }
