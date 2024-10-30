@@ -15,6 +15,7 @@
 
 #define LibRtspDebug printf
 #define SUPPORT_DIGEST 1
+#define USER_AGENT "github/dontls"
 
 #if SUPPORT_DIGEST
 #include "crypto/md5.h"
@@ -303,6 +304,7 @@ enum {
   PAUSE,
   ANNOUNCE,
   TEARDOWN,
+  SETUP_NOSS,
   SETAUDIO
 };
 
@@ -312,13 +314,13 @@ inline const char *Format(int type) {
     return "OPTIONS %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "%s" // Authorization
-           "User-Agent: \r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "\r\n";
   case DESCRIBE:
     return "DESCRIBE %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "%s" // Authorization
-           "User-Agent: \r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "Accept: application/sdp\r\n"
            "\r\n";
   case SETUP:
@@ -326,7 +328,15 @@ inline const char *Format(int type) {
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "%s" // Authorization
-           "User-Agent: \r\n"
+           "User-Agent: " USER_AGENT "\r\n"
+           "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n"
+           "\r\n";
+  case SETUP_NOSS:
+    return "SETUP %s/%s RTSP/1.0\r\n"
+           "CSeq: %d\r\n"
+           "%s"
+           "%s" // Authorization
+           "User-Agent: " USER_AGENT "\r\n"
            "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n"
            "\r\n";
   case PLAY:
@@ -334,13 +344,14 @@ inline const char *Format(int type) {
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "%s" // Authorization
-           "User-Agent: \r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "Range: npt=0.000-\r\n"
            "\r\n";
   case PAUSE:
     return "PAUSE %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "Session: %s\r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "%s"
            "%s"
            "\r\n";
@@ -350,26 +361,27 @@ inline const char *Format(int type) {
            "Content-Type: application/sdp\r\n"
            "%s"
            "Content-length: %d\r\n\r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "%s\r\n";
   case SET_PARAMETER:
     return "SET_PARAMETER %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "Session: %s\r\n"
-           "User-Agent: \r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "Content-length: %d\r\n\r\n"
            "%s: %s\r\n";
   case GET_PARAMETER:
     return "GET_PARAMETER %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "Session: %s\r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "%s"
-           "User-Agent: \r\n"
            "\r\n";
   case TEARDOWN:
     return "TEARDOWN %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "Session: %s\r\n"
-           "User-Agent: \r\n"
+           "User-Agent: " USER_AGENT "\r\n"
            "\r\n";
   default:
     break;
@@ -457,22 +469,25 @@ public:
 
 private:
   template <class... Args> void doWriteCmd(int type, Args... args) {
+    cmd_ = type;
     char buf[PKG_LEN] = {0};
+    if (type == SETUP && sdp_.session.empty()) {
+      type = SETUP_NOSS;
+    }
     sprintf(buf, Format(type), url_.path.c_str(), args...);
     LibRtspDebug("\nwrite --> \n%s", buf);
     Write(buf, strlen(buf));
-    cmd_ = type;
   }
 
   void doRtspParse(char *b) {
     std::vector<std::string> res;
     char *ptr = b, *ptr1 = nullptr;
     while ((ptr1 = strstr(ptr, "\r\n"))) {
-      res.push_back(std::string(ptr, ptr1 - ptr));
+      std::string s(ptr, ptr1 - ptr);
+      res.emplace_back(s);
       ptr = ptr1 + 2;
     }
     int len = ptr - b;
-    b[len - 1] = '\0';
     LibRtspDebug("%d read --> \n%s", len, b);
     switch (cmd_) {
     case OPTIONS: {
@@ -500,28 +515,36 @@ private:
       }
       break;
     };
-    case SETUP:
-      doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
-                 url_.GetAuth("PLAY").c_str());
-      break;
     case SETAUDIO: {
       auto it = std::find_if(sdp_.medias.begin(), sdp_.medias.end(),
                              [](sdp::media &m) {
                                return m.id.find("audio") != std::string::npos;
                              });
-      if (it == sdp_.medias.end()) {
-        doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
-                   url_.GetAuth("PLAY").c_str());
-      } else {
+      if (it != sdp_.medias.end()) {
         atype_ = it->format;
         doWriteCmd(SETUP, it->id.c_str(), seq_++, sdp_.session.c_str(),
                    url_.GetAuth("SETUP").c_str());
+        break;
       }
-    } break;
+    }
+    case SETUP:
+      if (sdp_.session.empty()) {
+        auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
+          return s.find("Session: ") != std::string::npos;
+        });
+        if (it != res.end()) {
+          auto pos = it->find_first_of(';');
+          sdp_.session = it->substr(9, pos - 9);
+        }
+      }
+      doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
+                 url_.GetAuth("PLAY").c_str());
+      break;
     default:
       rbuf_.Remove(len);
       return;
     }
+    memset(b, 0, len);
     rbuf_.Reset(0);
   }
 };
