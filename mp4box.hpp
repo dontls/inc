@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string>
 
-#define Debug printf
+#define LibMp4Debug printf
 
 namespace libmp4 {
 
@@ -401,21 +401,21 @@ inline const char *trak::Marshal(u32 id, u32 length) {
   // minf
   mdia.minf.size = Htobe32(sizeof(mdia.minf) + length);
   mdia.minf.type = Le32Type("minf");
-  Debug("minf size = %u\n", Htobe32(mdia.minf.size));
+  LibMp4Debug("minf size = %u\n", Htobe32(mdia.minf.size));
 
   // mdia
   mdia.size = Htobe32(sizeof(mdia) + length);
   mdia.type = Le32Type("mdia");
-  Debug("mdia size = %u\n", Htobe32(mdia.size));
+  LibMp4Debug("mdia size = %u\n", Htobe32(mdia.size));
 
   // stbl
   mdia.minf.stbl.size = Htobe32(sizeof(mdia.minf.stbl) + length);
   mdia.minf.stbl.type = Le32Type("stbl");
-  Debug("stbl size = %u\n", Htobe32(mdia.minf.stbl.size));
+  LibMp4Debug("stbl size = %u\n", Htobe32(mdia.minf.stbl.size));
 
   size = Htobe32(sizeof(trak) + length);
   type = Le32Type("trak");
-  Debug("trak size = %u\n", Htobe32(size));
+  LibMp4Debug("trak size = %u\n", Htobe32(size));
   return (const char *)this;
 }
 

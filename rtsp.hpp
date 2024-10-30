@@ -13,7 +13,7 @@
 #include <map>
 #include <functional>
 
-#define Debug printf
+#define LibRtspDebug printf
 #define SUPPORT_DIGEST 1
 
 #if SUPPORT_DIGEST
@@ -383,8 +383,8 @@ class Client : libnet::TcpConn {
 private:
   int cmd_;
   int seq_;
-  uint8_t atype_; // audio rtp type
   rtp rtp_;
+  uint8_t atype_; // audio rtp type
   url url_;
   sdp sdp_;
   libyte::Buffer rbuf_;
@@ -392,10 +392,8 @@ private:
   std::function<uint8_t(sdp &, rtp *, libyte::Buffer &)> decode_;
 
 public:
-  Client(bool hasAudio = false) : cmd_(0), seq_(0), atype_(0), rtp_{0} {
-    if (hasAudio) {
-      atype_ = 0xff;
-    }
+  Client(bool reqAudio = false) : cmd_(0), seq_(0), rtp_{0} {
+    atype_ = reqAudio ? 0xff : 0;
   }
   ~Client() { Close(); }
   using FrameCallack =
@@ -405,58 +403,54 @@ public:
     if (url_.Parse(sUrl) == false) {
       return false;
     }
-    try {
-      Dial(url_.ip.c_str(), url_.port);
-      doWriteCmd(OPTIONS, seq_++, "");
-      long ts = libtime::UnixMilli();
+    Dial(url_.ip.c_str(), url_.port);
+    doWriteCmd(OPTIONS, seq_++, "");
+    long ts = libtime::UnixMilli();
+    for (;;) {
+      char buf[PKG_LEN] = {0};
+      int n = Read(buf, PKG_LEN, 1000);
+      rbuf_.Write(buf, n);
       for (;;) {
-        char buf[PKG_LEN] = {0};
-        int n = Read(buf, PKG_LEN);
-        rbuf_.Write(buf, n);
-        for (;;) {
-          uint8_t *b = (uint8_t *)rbuf_.Bytes();
-          int blen = rbuf_.Len() - 4;
-          if (blen < 0) {
+        uint8_t *b = (uint8_t *)rbuf_.Bytes();
+        int blen = rbuf_.Len() - 4;
+        if (blen < 0) {
+          break;
+        }
+        if (b[0] == '$') {
+          uint8_t ch = b[1];
+          int dlen = GetUint16(&b[2]);
+          if (blen < dlen) {
             break;
           }
-          if (b[0] == '$') {
-            uint8_t ch = b[1];
-            int dlen = GetUint16(&b[2]);
-            if (blen < dlen) {
-              break;
-            }
-            rtp_.Unmarshal(b + 4, dlen);
-            uint8_t code = 0;
-            if (rtp_.payloadType == 96 || rtp_.payloadType == 98) {
-              code = this->decode_(sdp_, &rtp_, dbuf_);
-            } else if (rtp_.payloadType == atype_) {
-              code = 0x40;
-              dbuf_.Write((char *)rtp_.data, rtp_.size);
-            }
-            if (code & 0x40) {
-              auto fmt = sdp_.formats[rtp_.payloadType];
-              if (callback) {
-                callback(fmt.c_str(), dbuf_.Bytes(), dbuf_.Len());
-              } else {
-                Debug("rtp type %d channel %d, %ld\n", rtp_.payloadType, ch,
-                      dbuf_.Len());
-              }
-              dbuf_.Reset(0);
-            }
-            rbuf_.Remove(dlen + 4);
-          } else {
-            // GET_PARAMETER response
-            doRtspParse((char *)b);
+          rtp_.Unmarshal(b + 4, dlen);
+          uint8_t code = 0;
+          if (rtp_.payloadType == 96 || rtp_.payloadType == 98) {
+            code = this->decode_(sdp_, &rtp_, dbuf_);
+          } else if (rtp_.payloadType == atype_) {
+            code = 0x40;
+            dbuf_.Write((char *)rtp_.data, rtp_.size);
           }
-        }
-        if (libtime::Since(ts) > 50000) {
-          ts = libtime::UnixMilli();
-          doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
-                     url_.GetAuth("GET_PARAMETER").c_str());
+          if (code & 0x40) {
+            auto fmt = sdp_.formats[rtp_.payloadType];
+            if (callback) {
+              callback(fmt.c_str(), dbuf_.Bytes(), dbuf_.Len());
+            } else {
+              LibRtspDebug("rtp type %d channel %d, %ld\n", rtp_.payloadType,
+                           ch, dbuf_.Len());
+            }
+            dbuf_.Reset(0);
+          }
+          rbuf_.Remove(dlen + 4);
+        } else {
+          // GET_PARAMETER response
+          doRtspParse((char *)b);
         }
       }
-    } catch (libnet::Exception &e) {
-      Debug("%s\n", e.PrintError());
+      if (libtime::Since(ts) > 50000) {
+        ts = libtime::UnixMilli();
+        doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
+                   url_.GetAuth("GET_PARAMETER").c_str());
+      }
     }
     return true;
   }
@@ -465,7 +459,7 @@ private:
   template <class... Args> void doWriteCmd(int type, Args... args) {
     char buf[PKG_LEN] = {0};
     sprintf(buf, Format(type), url_.path.c_str(), args...);
-    Debug("\nwrite --> \n%s", buf);
+    LibRtspDebug("\nwrite --> \n%s", buf);
     Write(buf, strlen(buf));
     cmd_ = type;
   }
@@ -479,7 +473,7 @@ private:
     }
     int len = ptr - b;
     b[len - 1] = '\0';
-    Debug("%d read --> \n%s", len, b);
+    LibRtspDebug("%d read --> \n%s", len, b);
     switch (cmd_) {
     case OPTIONS: {
       auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
