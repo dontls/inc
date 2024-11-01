@@ -6,9 +6,9 @@ int main(int argc, char const *argv[]) {
   // FILE *file = fopen("12456.h264", "wb+");
   libfmp4::Writer file("12345.mp4");
   try {
-    cli.Play("rtsp://admin:admin@172.16.50.219:554/test.mp4",
-             [&](const char *foramt, char *data, int len) {
-               printf("%s length %d type 0x%02x\n", foramt, len, data[4]);
+    cli.Play("rtsp://172.16.50.222:554/stander/livestream/0/0",
+             [&](const char *foramt, uint8_t ftype, char *data, int len) {
+               printf("%s length %d type 0x%02x\n", foramt, len, ftype);
                file.WriteVideo(libtime::UnixMilli(), data[4] != 0x61, data,
                                len);
              });

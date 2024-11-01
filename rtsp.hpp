@@ -215,6 +215,8 @@ struct rtp {
   uint8_t *data;
   // payload size
   int size;
+  // 自定义frame type
+  uint8_t ftype;
   void Unmarshal(uint8_t *b, int len);
 };
 
@@ -230,6 +232,7 @@ inline void rtp::Unmarshal(uint8_t *b, int len) {
   this->ssrc = GetUint32(&b[8]);
   this->data = b + 12;
   this->size = len - 12;
+  this->ftype = 3;
 }
 
 static uint8_t Unmarshal264(sdp &s, rtp *r, libyte::Buffer &b) {
@@ -255,9 +258,10 @@ static uint8_t Unmarshal264(sdp &s, rtp *r, libyte::Buffer &b) {
   }
   b.Write((char *)r->data, r->size);
   if (r->marker == 1 && (ntype == 1 || ntype == 5)) {
+    r->ftype = ntype;
     sflag = 0x40;
   }
-  // printf("rtp size %d %ld\n", r->size, b.Len());
+  // printf("rtp size %d %d %ld\n", r->size, ntype, b.Len());
   return sflag;
 }
 
@@ -289,6 +293,7 @@ static uint8_t Unmarshal265(sdp &s, rtp *r, libyte::Buffer &b) {
   b.Write((char *)r->data, r->size);
   // printf("rtp size %d %ld\n", r->size, b.Len());
   if (r->marker == 1 && (ntype == 1 || ntype == 19)) {
+    r->ftype = ntype;
     sflag = 0x40;
   }
   return sflag;
@@ -408,8 +413,8 @@ public:
     atype_ = reqAudio ? 0xff : 0;
   }
   ~Client() { Close(); }
-  using FrameCallack =
-      std::function<void(const char *format, char *data, int length)>;
+  using FrameCallack = std::function<void(const char *format, uint8_t type,
+                                          char *data, int length)>;
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl, FrameCallack callback = nullptr) {
     if (url_.Parse(sUrl) == false) {
@@ -417,7 +422,7 @@ public:
     }
     Dial(url_.ip.c_str(), url_.port);
     doWriteCmd(OPTIONS, seq_++, "");
-    long ts = libtime::UnixMilli();
+    long long ts = libtime::UnixMilli();
     for (;;) {
       char buf[PKG_LEN] = {0};
       int n = Read(buf, PKG_LEN, 1000);
@@ -438,6 +443,7 @@ public:
           uint8_t code = 0;
           if (rtp_.payloadType == 96 || rtp_.payloadType == 98) {
             code = this->decode_(sdp_, &rtp_, dbuf_);
+            rtp_.ftype = rtp_.ftype == 1 ? 2 : 1;
           } else if (rtp_.payloadType == atype_) {
             code = 0x40;
             dbuf_.Write((char *)rtp_.data, rtp_.size);
@@ -445,7 +451,7 @@ public:
           if (code & 0x40) {
             auto fmt = sdp_.formats[rtp_.payloadType];
             if (callback) {
-              callback(fmt.c_str(), dbuf_.Bytes(), dbuf_.Len());
+              callback(fmt.c_str(), rtp_.ftype, dbuf_.Bytes(), dbuf_.Len());
             } else {
               LibRtspDebug("rtp type %d channel %d, %ld\n", rtp_.payloadType,
                            ch, dbuf_.Len());
