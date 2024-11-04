@@ -362,7 +362,7 @@ inline const char *Format(int type) {
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "User-Agent: " USER_AGENT "\r\n"
-           "%s"
+           "%s" // Authorization
            "%s"
            "\r\n";
   case ANNOUNCE:
@@ -385,13 +385,14 @@ inline const char *Format(int type) {
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "User-Agent: " USER_AGENT "\r\n"
-           "%s"
+           "%s" // Authorization
            "\r\n";
   case TEARDOWN:
     return "TEARDOWN %s RTSP/1.0\r\n"
            "CSeq: %d\r\n"
            "Session: %s\r\n"
            "User-Agent: " USER_AGENT "\r\n"
+           "%s" // Authorization
            "\r\n";
   default:
     break;
@@ -478,6 +479,11 @@ public:
     return true;
   }
 
+  void Stop() {
+    doWriteCmd(TEARDOWN, seq_++, sdp_.session.c_str(),
+               url_.GetAuth("TEARDOWN").c_str());
+  }
+
 private:
   template <class... Args> void doWriteCmd(int type, Args... args) {
     cmd_ = type;
@@ -518,11 +524,16 @@ private:
     };
     case DESCRIBE: {
       sdp_.Parse(res);
-      this->decode_ = Unmarshal264;
-      if (sdp_.medias[0].rtpmap.find("H265") != std::string::npos) {
+      auto m = std::find_if(sdp_.medias.begin(), sdp_.medias.end(),
+                            [](sdp::media &m) {
+                              return m.name.find("video") != std::string::npos;
+                            });
+      if (m->rtpmap.find("H265") != std::string::npos) {
         this->decode_ = Unmarshal265;
+      } else {
+        this->decode_ = Unmarshal264;
       }
-      doWriteCmd(SETUP, sdp_.medias[0].id.c_str(), seq_++, sdp_.session.c_str(),
+      doWriteCmd(SETUP, m->id.c_str(), seq_++, sdp_.session.c_str(),
                  url_.GetAuth("SETUP").c_str());
       cmd_ = SETAUDIO;
       break;
@@ -538,13 +549,13 @@ private:
         }
       }
       if (atype_ == 0xff) {
-        auto it = std::find_if(
+        auto m = std::find_if(
             sdp_.medias.begin(), sdp_.medias.end(), [](sdp::media &m) {
               return m.name.find("audio") != std::string::npos;
             });
-        if (it != sdp_.medias.end()) {
-          atype_ = it->format;
-          doWriteCmd(SETUP, it->id.c_str(), seq_++, sdp_.session.c_str(),
+        if (m != sdp_.medias.end()) {
+          atype_ = m->format;
+          doWriteCmd(SETUP, m->id.c_str(), seq_++, sdp_.session.c_str(),
                      url_.GetAuth("SETUP").c_str());
           break;
         }
