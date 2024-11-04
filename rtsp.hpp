@@ -25,7 +25,7 @@ namespace librtsp {
 
 static char _nalu_header[] = {0x00, 0x00, 0x00, 0x01};
 
-inline std::string FindVar(std::string &str, const char *s, const char *e) {
+inline std::string findVar(std::string &str, const char *s, const char *e) {
   auto p0 = str.find(s);
   if (p0 == std::string::npos) {
     return "";
@@ -46,8 +46,7 @@ struct url {
   std::string ip;
   unsigned short port;
   std::string baseAuth;
-  std::string realm;
-  std::string nonce;
+  std::string digestHex;
   bool Parse(const char *s);
   void SetAuth(std::string s);
   std::string GetAuth(std::string type);
@@ -97,29 +96,30 @@ inline bool url::Parse(const char *uri) {
 
 inline void url::SetAuth(std::string s) {
   if (s.find("Basic") != std::string::npos) {
-    baseAuth = "Authorization: Basic ";
-    return;
-  }
+    baseAuth =
+        "Authorization: Basic " + base64_encode(user + ":" + password) + "\r\n";
+  } else if (s.find("Digest") != std::string::npos) {
+    std::string realm = findVar(s, "realm=\"", "\"");
+    std::string nonce = findVar(s, "nonce=\"", "\"");
+    baseAuth = "Authorization: Digest ";
+    baseAuth += ("username=\"" + user);
+    baseAuth += ("\", realm=\"" + realm);
+    baseAuth += ("\", nonce=\"" + nonce);
+    baseAuth += ("\", uri=\"" + path + "\"");
 #ifdef SUPPORT_DIGEST
-  realm = FindVar(s, "realm=\"", "\"");
-  nonce = FindVar(s, "nonce=\"", "\"");
-  baseAuth = "Authorization: Digest ";
-  baseAuth += ("username=\"" + user);
-  baseAuth += ("\", realm=\"" + realm);
-  baseAuth += ("\", nonce=\"" + nonce);
-  baseAuth += ("\", uri=\"" + path + "\"");
+    digestHex = md5::md5_hash_hex(user + ":" + realm + ":" + password) + ":" +
+                nonce + ":";
 #endif
+  }
 }
 
 inline std::string url::GetAuth(std::string type) {
-  if (!baseAuth.empty()) {
-    if (baseAuth.find("Basic") != std::string::npos) {
-      return baseAuth + base64_encode(user + ":" + password);
-    }
+  if (baseAuth.find("Basic") != std::string::npos) {
+    return baseAuth;
+  } else if (baseAuth.find("Digest") != std::string::npos) {
 #ifdef SUPPORT_DIGEST
-    std::string hex = md5::md5_hash_hex(user + ":" + realm + ":" + password);
-    hex += (":" + nonce + ":" + md5::md5_hash_hex(type + ":" + this->path));
-    return baseAuth + (", response=\"" + md5::md5_hash_hex(hex) + "\"\r\n");
+    std::string s = digestHex + md5::md5_hash_hex(type + ":" + this->path);
+    return baseAuth + (", response=\"" + md5::md5_hash_hex(s) + "\"\r\n");
 #endif
   }
   return "";
@@ -129,6 +129,7 @@ struct sdp {
   std::string session;
   struct media {
     int format; // 96 /98
+    std::string name;
     std::string rtpmap;
     std::string sprops;
     std::string id;
@@ -149,6 +150,7 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
     } else if ((pos = s.find("m=")) != std::string::npos) {
       medias.resize(medias.size() + 1);
       it = &medias.back();
+      it->name = std::string(s.c_str() + 2);
     } else if (it != nullptr) {
       if ((pos = s.find("a=rtpmap:")) != std::string::npos) {
         std::istringstream sline(s.c_str() + 9);
@@ -163,28 +165,31 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
       }
     }
   }
-  auto &m = medias[0];
-  if (m.rtpmap.find("H264") != std::string::npos) {
-    // sprop-parameter-sets=
-    std::string sps = FindVar(m.sprops, "sprop-parameter-sets=", ",");
-    std::string pps = FindVar(m.sprops, ",", ",");
-    if (!sps.empty()) {
-      spsvalue = std::string(_nalu_header, 4);
-      spsvalue.append(base64_decode(sps));
-      spsvalue.append(_nalu_header, 4);
-      spsvalue.append(base64_decode(pps));
-    }
+  auto m = std::find_if(medias.begin(), medias.end(), [](sdp::media &m) {
+    return m.id.find("video") != std::string::npos;
+  });
+  if (m == medias.end()) {
     return;
   }
-  // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
-  std::string vps = FindVar(m.sprops, "vps=", ";");
-  std::string sps = FindVar(m.sprops, "sps=", ";");
-  std::string pps = FindVar(m.sprops, "pps=", ";");
-  if (!sps.empty()) {
-    spsvalue = std::string(_nalu_header, 4);
-    spsvalue.append(base64_decode(sps));
-    spsvalue.append(_nalu_header, 4);
-    spsvalue.append(base64_decode(pps));
+  std::string sps, pps, vps;
+  if (m->rtpmap.find("H264") != std::string::npos) {
+    // sprop-parameter-sets=
+    sps = findVar(m->sprops, "sprop-parameter-sets=", ",");
+    pps = findVar(m->sprops, ",", ",");
+  } else {
+    // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
+    vps = findVar(m->sprops, "vps=", ";");
+    sps = findVar(m->sprops, "sps=", ";");
+    pps = findVar(m->sprops, "pps=", ";");
+  }
+  if (sps.empty()) {
+    return;
+  }
+  spsvalue = std::string(_nalu_header, 4);
+  spsvalue.append(base64_decode(sps));
+  spsvalue.append(_nalu_header, 4);
+  spsvalue.append(base64_decode(pps));
+  if (!vps.empty()) {
     spsvalue.append(_nalu_header, 4);
     spsvalue.append(base64_decode(vps));
   }
@@ -414,7 +419,7 @@ public:
   }
   ~Client() { Close(); }
   using FrameCallack = std::function<void(const char *format, uint8_t type,
-                                          char *data, int length)>;
+                                          char *data, size_t length)>;
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl, FrameCallack callback = nullptr) {
     if (url_.Parse(sUrl) == false) {
@@ -503,6 +508,9 @@ private:
       if (it == res.end()) {
         doWriteCmd(DESCRIBE, seq_++, url_.GetAuth("DESCRIBE").c_str());
       } else {
+        if (!url_.baseAuth.empty()) {
+          throw libnet::Exception(libnet::EAccessDenied);
+        }
         url_.SetAuth(it->c_str());
         doWriteCmd(OPTIONS, seq_++, url_.GetAuth("OPTIONS").c_str());
       }
@@ -516,24 +524,10 @@ private:
       }
       doWriteCmd(SETUP, sdp_.medias[0].id.c_str(), seq_++, sdp_.session.c_str(),
                  url_.GetAuth("SETUP").c_str());
-      if (atype_ == 0xff) {
-        cmd_ = SETAUDIO;
-      }
+      cmd_ = SETAUDIO;
       break;
     };
     case SETAUDIO: {
-      auto it = std::find_if(sdp_.medias.begin(), sdp_.medias.end(),
-                             [](sdp::media &m) {
-                               return m.id.find("audio") != std::string::npos;
-                             });
-      if (it != sdp_.medias.end()) {
-        atype_ = it->format;
-        doWriteCmd(SETUP, it->id.c_str(), seq_++, sdp_.session.c_str(),
-                   url_.GetAuth("SETUP").c_str());
-        break;
-      }
-    }
-    case SETUP:
       if (sdp_.session.empty()) {
         auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
           return s.find("Session: ") != std::string::npos;
@@ -543,6 +537,20 @@ private:
           sdp_.session = it->substr(9, pos - 9);
         }
       }
+      if (atype_ == 0xff) {
+        auto it = std::find_if(
+            sdp_.medias.begin(), sdp_.medias.end(), [](sdp::media &m) {
+              return m.name.find("audio") != std::string::npos;
+            });
+        if (it != sdp_.medias.end()) {
+          atype_ = it->format;
+          doWriteCmd(SETUP, it->id.c_str(), seq_++, sdp_.session.c_str(),
+                     url_.GetAuth("SETUP").c_str());
+          break;
+        }
+      }
+    }
+    case SETUP:
       doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
                  url_.GetAuth("PLAY").c_str());
       break;
