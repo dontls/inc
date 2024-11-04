@@ -1,6 +1,7 @@
 #pragma once
 
-#include "rtmp.h"
+#include "librtmp/log.h"
+#include "librtmp/rtmp.h"
 #include "sps.hpp"
 #include "buffer.hpp"
 #include "log.hpp"
@@ -152,7 +153,7 @@ inline int Marshal(char *out, char *data, size_t len, bool ispecial = false) {
 class Client {
 private:
   RTMP *rtmp_;
-  bool waitKey_;
+  bool wKey_;
   bool ish264_;
   long firsts_; // 第一帧数据时间戳
   libyte::Buffer sBuf_;
@@ -193,7 +194,7 @@ private:
   }
 
 public:
-  Client(/* args */) : rtmp_(nullptr), waitKey_(true), ish264_(true) {}
+  Client(/* args */) : rtmp_(nullptr), wKey_(true), ish264_(true) {}
   ~Client() {
     if (rtmp_) {
       RTMP_Close(rtmp_);
@@ -202,6 +203,8 @@ public:
   }
 
   bool Dial(const char *url) {
+    // 不显示打印日志
+    RTMP_LogSetLevel(RTMP_LOGCRIT);
     rtmp_ = RTMP_Alloc();
     RTMP_Init(rtmp_);
     const char *errMsg = "";
@@ -224,8 +227,6 @@ public:
     }
     return true;
   Error:
-    // 不显示打印日志
-    // RTMP_LogSetLevel(RTMP_LOGCRIT);
     RTMP_Free(rtmp_);
     rtmp_ = NULL;
     LogError(1, "%s", errMsg);
@@ -239,12 +240,12 @@ public:
     if (b == nullptr) {
       return 0;
     }
-    if (waitKey_ && type == 1) {
-      waitKey_ = false;
+    if (wKey_ && type == 1) {
+      wKey_ = false;
       ish264_ = nalu::IsH264(b[0]);
       firsts_ = pts;
     }
-    if (waitKey_) {
+    if (wKey_) {
       return 0;
     }
     pts = pts - firsts_;
@@ -259,7 +260,7 @@ public:
   }
 
   int WriteAAC(char *data, size_t len, long pts, bool ispecial = false) {
-    if (waitKey_) {
+    if (wKey_) {
       return 0;
     }
     pts = pts - firsts_;
