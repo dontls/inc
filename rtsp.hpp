@@ -410,7 +410,6 @@ private:
   uint8_t atype_; // audio rtp type
   url url_;
   sdp sdp_;
-  libyte::Buffer rbuf_;
   libyte::Buffer dbuf_;
   std::function<uint8_t(sdp &, rtp *, libyte::Buffer &)> decode_;
 
@@ -429,21 +428,21 @@ public:
     Dial(url_.ip.c_str(), url_.port);
     doWriteCmd(OPTIONS, seq_++, "");
     long long ts = libtime::UnixMilli();
-    for (;;) {
-      char buf[PKG_LEN] = {0};
-      int n = Read(buf, PKG_LEN, 1000);
-      rbuf_.Write(buf, n);
-      for (;;) {
-        uint8_t *b = (uint8_t *)rbuf_.Bytes();
-        int blen = rbuf_.Len() - 4;
-        if (blen < 0) {
-          break;
-        }
-        if (b[0] == '$') {
+    this->LoopRead(
+        [&](libyte::Buffer &buf) {
+          int blen = static_cast<int>(buf.Len()) - 4;
+          if (blen < 0) {
+            return 0;
+          }
+          uint8_t *b = (uint8_t *)buf.Bytes();
+          if (b[0] != '$') {
+            // GET_PARAMETER response
+            return doRtspParse((char *)b);
+          }
           uint8_t ch = b[1];
           int dlen = GetUint16(&b[2]);
           if (blen < dlen) {
-            break;
+            return 0;
           }
           rtp_.Unmarshal(b + 4, dlen);
           uint8_t code = 0;
@@ -464,18 +463,15 @@ public:
             }
             dbuf_.Reset(0);
           }
-          rbuf_.Remove(dlen + 4);
-        } else {
-          // GET_PARAMETER response
-          doRtspParse((char *)b);
-        }
-      }
-      if (libtime::Since(ts) > 50000) {
-        ts = libtime::UnixMilli();
-        doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
-                   url_.GetAuth("GET_PARAMETER").c_str());
-      }
-    }
+          // 保活机制
+          if (libtime::Since(ts) > 50000) {
+            ts = libtime::UnixMilli();
+            doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
+                       url_.GetAuth("GET_PARAMETER").c_str());
+          }
+          return dlen + 4;
+        },
+        1000);
     return true;
   }
 
@@ -496,7 +492,7 @@ private:
     Write(buf, strlen(buf));
   }
 
-  void doRtspParse(char *b) {
+  int doRtspParse(char *b) {
     std::vector<std::string> res;
     char *ptr = b, *ptr1 = nullptr;
     while ((ptr1 = strstr(ptr, "\r\n"))) {
@@ -566,11 +562,10 @@ private:
                  url_.GetAuth("PLAY").c_str());
       break;
     default:
-      rbuf_.Remove(len);
-      return;
+      return len;
     }
     memset(b, 0, len);
-    rbuf_.Reset(0);
+    return len;
   }
 };
 

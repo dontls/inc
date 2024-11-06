@@ -28,7 +28,9 @@ typedef int socklen_t;
 #endif
 
 #include <exception>
-#include <string.h>
+#include "buffer.hpp"
+#include <functional>
+
 namespace libnet {
 // ========================================================================
 //  Globals and Typedefs
@@ -601,6 +603,12 @@ public:
   // ====================================================================
   void Close();
 
+  // ====================================================================
+  // Function:    LoopRead
+  // Purpose:     LoopRead with protocol handler, return protocol length
+  // ====================================================================
+  void LoopRead(std::function<int(libyte::Buffer &)> handler, int timeout = 0);
+
 protected:
   bool m_connected; // is the socket connected?
 
@@ -761,6 +769,30 @@ inline void TcpConn::Close() {
   Socket::Close();
 
   m_connected = false;
+}
+
+// ====================================================================
+// Function:    LoopRead
+// Purpose:     LoopRead with protocol handler
+// ====================================================================
+inline void TcpConn::LoopRead(std::function<int(libyte::Buffer &)> handler,
+                              int timeout) {
+  libyte::Buffer rbuf;
+  for (;;) {
+    char buf[2048] = {0};
+    int n = Read(buf, 2048, timeout);
+    rbuf.Write(buf, n);
+    for (;;) {
+      int l = handler(rbuf);
+      if (l < 0) {
+        return;
+      }
+      if (l == 0) {
+        break;
+      }
+      rbuf.Remove(l);
+    }
+  }
 }
 
 // ========================================================================

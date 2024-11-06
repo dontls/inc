@@ -44,11 +44,14 @@ public:
       fclose(file_);
       file_ = NULL;
     }
-    file_ = fopen("1080p.h264", "rb");
+    file_ = fopen(filename, "rb");
     return file_ != NULL;
   }
 
   char *Read(int &len, int &ftype) {
+    if (file_ == NULL) {
+      return NULL;
+    }
     memset(data_, 0, READ_BUF_SIZ);
     int n = fread(data_, 1, READ_BUF_SIZ, file_);
     if (n <= 0) {

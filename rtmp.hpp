@@ -4,7 +4,6 @@
 #include "librtmp/rtmp.h"
 #include "sps.hpp"
 #include "buffer.hpp"
-#include "log.hpp"
 
 namespace librtmp {
 
@@ -229,7 +228,7 @@ public:
   Error:
     RTMP_Free(rtmp_);
     rtmp_ = NULL;
-    LogError(1, "%s", errMsg);
+    printf("%s\n", errMsg);
     return false;
   }
 
