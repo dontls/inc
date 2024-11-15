@@ -618,9 +618,9 @@ inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length) {
     firts_ = lsts_ = ts;
   }
   value[0].emplace_back(Htobe32(u32(ts - lsts_))); // stts
-  value[1].emplace_back(Htobe32(1));          // stss
-  value[2].emplace_back(Htobe32(length));     // stsz
-  value[3].emplace_back(Htobe32(offset));     // stco
+  value[1].emplace_back(Htobe32(1));               // stss
+  value[2].emplace_back(Htobe32(length));          // stsz
+  value[3].emplace_back(Htobe32(offset));          // stco
   lsts_ = ts;
   count_++;
   offset += length;
@@ -651,7 +651,7 @@ inline u32 Trak::MakeVideo(nalu::Vector &nalus) {
   int fps = 0, n = 0;
   char buf[256] = {0};
   nalu::Value &sps = nalus[0];
-  box::stsdv stsd;
+  box::stsdv stsd{0};
   if (nalu::IsH264(sps.type)) {
     stsd.avc1.type = Le32Type("avc1");
     avc::decode_sps((BYTE *)sps.data, sps.size, trak_.tkhd.width,
