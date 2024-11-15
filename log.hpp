@@ -22,7 +22,7 @@ enum level {
   DEBUG, //
   INFO,  //
   WARN,  //
-  ERROR  //
+  ERR    //
 };
 
 static const char *_levelout[] = {
@@ -106,5 +106,5 @@ public:
                                      __FILE__, __LINE__, ##__VA_ARGS__);
 
 #define LogError(b, ...)                                                       \
-  liblog::Logger::Instance().Println((b) ? liblog::ERROR : liblog::DEBUG,      \
+  liblog::Logger::Instance().Println((b) ? liblog::ERR : liblog::DEBUG,        \
                                      __FILE__, __LINE__, ##__VA_ARGS__);
