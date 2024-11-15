@@ -501,7 +501,8 @@ private:
       ptr = ptr1 + 2;
     }
     int len = ptr - b;
-    LibRtspDebug("%d read --> \n%s", len, b);
+    b[len - 1] = '\0';
+    LibRtspDebug("%d read --> \n%s\n", len, b);
     switch (cmd_) {
     case OPTIONS: {
       auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
@@ -524,11 +525,9 @@ private:
                             [](sdp::media &m) {
                               return m.name.find("video") != std::string::npos;
                             });
-      if (m->rtpmap.find("H265") != std::string::npos) {
-        this->decode_ = Unmarshal265;
-      } else {
-        this->decode_ = Unmarshal264;
-      }
+      this->decode_ = (m->rtpmap.find("H265") != std::string::npos)
+                          ? Unmarshal265
+                          : Unmarshal264;
       doWriteCmd(SETUP, m->id.c_str(), seq_++, sdp_.session.c_str(),
                  url_.GetAuth("SETUP").c_str());
       cmd_ = SETAUDIO;
