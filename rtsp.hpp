@@ -304,6 +304,56 @@ static uint8_t Unmarshal265(sdp &s, rtp *r, libyte::Buffer &b) {
   return sflag;
 }
 
+struct rtcp_rb {
+  unsigned int ssrc;         /* data source being reported */
+  unsigned int fraction : 8; /* fraction lost since last SR/RR */
+  int lost : 24;             /* cumul. no. pkts lost (signed!) */
+  unsigned int last_seq;     /* extended last seq. no. received */
+  unsigned int jitter;       /* interarrival jitter */
+  unsigned int lsr;          /* last SR packet from this source */
+  unsigned int dlsr;         /* delay since last SR packet */
+};
+
+struct rtcp {
+  unsigned int version : 2; /* protocol version */
+  unsigned int p : 1;       /* padding flag */
+  unsigned int count : 5;   /* varies by packet type */
+  unsigned int pt : 8;      /* RTCP packet type
+  abbrev.  name                 value
+  SR       sender report          200
+  RR       receiver report        201
+  SDES     source description     202
+  BYE      goodbye                203
+  APP      application-defined    204*/
+  unsigned short length;    /* pkt len in words, w/o this word */
+  union {
+    /* sender report (SR) */
+    struct {
+      unsigned int ssrc;     /* sender generating this report */
+      unsigned int ntp_sec;  // NTP timestamp   <--| These are the only
+      unsigned int ntp_frac; //                 <--| additional 20-bytes
+      unsigned int rtp_ts;   // RTP timestamp   <--| fields besides
+      unsigned int psent;    // packets sent    <--| the RR
+      unsigned int osent;    // octets sent     <--| header.
+      struct rtcp_rb rb;     /* variable-length list */
+    } sr;
+
+    /* reception report (RR) */
+    struct {
+      unsigned int ssrc; /* receiver generating this report */
+      struct rtcp_rb rb; /* variable-length list */
+    } rr;
+    /* BYE */
+    struct {
+      unsigned int ssrc; /* list of sources */
+
+      // OPTIONAL reason for leaving and length of reason in bytes
+      unsigned int length : 8;
+      unsigned char reason[256];
+    } bye;
+  } r;
+};
+
 enum {
   OPTIONS,
   DESCRIBE,
@@ -464,10 +514,15 @@ public:
             dbuf_.Reset(0);
           }
           // 保活机制
-          if (libtime::Since(ts) > 50000) {
+          if (libtime::Since(ts) > 10000) {
             ts = libtime::UnixMilli();
-            doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
-                       url_.GetAuth("GET_PARAMETER").c_str());
+            // doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
+            //            url_.GetAuth("GET_PARAMETER").c_str());
+            rtcp pkt{0};
+            pkt.pt = 200;
+            pkt.r.sr.rtp_ts = rtp_.timestamp;
+            pkt.r.sr.rb.ssrc = rtp_.seq;
+            this->Write((char *)&pkt, sizeof(rtcp));
           }
           return dlen + 4;
         },
