@@ -5,12 +5,12 @@
 #include <iomanip>
 #include <ctime>
 #include <sstream>
-#ifdef _WIN32
-#include <thread>
-#include <chrono>
-#else
+#ifdef __linux__
 #include <sys/time.h>
 #include <unistd.h>
+#else
+#include <thread>
+#include <chrono>
 #endif
 
 namespace libtime {
@@ -27,7 +27,7 @@ inline std::string Format(long long t = 0) {
   struct tm timeinfo = {0};
 #ifdef _WIN32
   localtime_s(&timeinfo, &t0);
-#else
+#elif __linux__
   localtime_r(&t0, &timeinfo);
 #endif
   char szText[24] = {0};
@@ -45,19 +45,19 @@ inline std::time_t Format2Unix(const char *str) {
 }
 
 inline long long UnixMilli() {
-#ifdef _WIN32
-  auto now = std::chrono::system_clock::now();
-  return static_cast<long long>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          now.time_since_epoch())
-          .count());
-#else
+#ifdef __linux__
   struct timeval tv;
   gettimeofday(&tv, 0);
   long long llRet = tv.tv_sec;
   llRet *= 1000;
   llRet += tv.tv_usec / 1000;
   return llRet;
+#else
+  auto now = std::chrono::system_clock::now();
+  return static_cast<long long>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          now.time_since_epoch())
+          .count());
 #endif
 }
 
@@ -65,10 +65,10 @@ inline long long UnixMilli() {
 inline long long Since(long long tb) { return UnixMilli() - tb; }
 
 inline void Sleep(unsigned int ms) {
-#ifdef _WIN32
-  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-#else
+#ifdef __linux__
   usleep(ms * 1000);
+#else
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 #endif
 }
 } // namespace libtime
