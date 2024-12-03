@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <stdexcept>
 
 namespace libcomm {
 // T 需要传入基类
@@ -13,7 +14,7 @@ public:
   template <typename N> struct register_t {
     template <typename... Args>
     register_t(const std::string &key, Args... args) {
-      Factory::Instance()->_map.emplace(key, [=] { return new N(args...); });
+      Factory::Instance()->map_.emplace(key, [=] { return new N(args...); });
     }
   };
 
@@ -45,13 +46,13 @@ private:
   }
 
   auto Find(const std::string &key) -> T * {
-    if (_map.find(key) == _map.end())
+    if (map_.find(key) == map_.end())
       throw std::invalid_argument("key is not exist!");
 
     // 这里会动态转化指针，如果不是继承关系，返回nullptr
-    return dynamic_cast<T *>(_map[key]());
+    return dynamic_cast<T *>(map_[key]());
   }
-  std::map<std::string, std::function<T *()>> _map;
+  std::map<std::string, std::function<T *()>> map_;
 };
 } // namespace libcomm
 

@@ -1,6 +1,5 @@
 #include "../singleton.hpp"
 #include "../channel.hpp"
-#include <cstddef>
 #include <iostream>
 #include <thread>
 #include <unistd.h>
@@ -16,10 +15,10 @@ int main(int argc, char const *argv[]) {
   libcomm::Singleton<A>::Instance().Display();
   libcomm::Singleton<A>::Instance().Display();
 
-  libcomm::Channel<int> chls(1);
+  libsync::Channel<int> chls(1);
   std::thread t([&] {
-    sleep(2);
     for (const auto &it : chls) {
+      sleep(2);
       printf(":------> read %d\n", it);
     }
   });

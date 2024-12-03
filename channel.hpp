@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <type_traits>
 
-namespace libcomm {
+namespace libsync {
 
 /**
  * @brief An iterator that block the current thread,
@@ -206,4 +206,4 @@ template <typename T> void Channel<T>::close() noexcept {
 template <typename T> bool Channel<T>::closed() const noexcept {
   return is_closed_.load();
 }
-} // namespace libcomm
+} // namespace libsync

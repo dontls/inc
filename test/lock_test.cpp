@@ -3,11 +3,11 @@
 #include <thread>
 #include <unistd.h>
 
-libthread::Mutex mtx_;
+libsync::Mutex mtx_;
 
 static int count = 0;
 void display() {
-  libthread::Lock lock(&mtx_);
+  libsync::Lock lock(&mtx_);
   count++;
   printf("%d\n", count);
 }

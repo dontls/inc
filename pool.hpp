@@ -11,7 +11,7 @@
 #include <functional>
 #include <stdexcept>
 
-namespace libcomm {
+namespace libsync {
 class ThreadPool {
 public:
   ThreadPool(size_t);
@@ -88,4 +88,4 @@ inline ThreadPool::~ThreadPool() {
     worker.join();
 }
 
-} // namespace libcomm
+} // namespace libsync
