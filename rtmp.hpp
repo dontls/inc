@@ -1,9 +1,7 @@
 #pragma once
 
-#include "buffer.hpp"
 #include "librtmp/log.h"
 #include "librtmp/rtmp.h"
-#include "sps.hpp"
 #include "flv.hpp"
 
 #define RTMP_HEAD_SIZE (sizeof(RTMPPacket) + RTMP_MAX_HEADER_SIZE)
