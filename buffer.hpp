@@ -8,6 +8,12 @@
 #include <vector>
 
 namespace libyte {
+
+struct Slice {
+  char *data;
+  size_t length;
+};
+
 class Buffer {
 private:
   std::mutex lock_;
