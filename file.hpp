@@ -10,8 +10,8 @@
 
 namespace libfile {
 #ifdef _WIN32
-inline bool IsDir(const char *path) {
-  DWORD dwAttrs = ::GetFileAttributes(path);
+inline bool IsDir(const char *filename) {
+  DWORD dwAttrs = ::GetFileAttributes(filename);
   if (dwAttrs == INVALID_FILE_ATTRIBUTES) {
     return false;
   }
@@ -23,14 +23,21 @@ inline size_t Size(const char *filename) {
       ::CreateFile(filename, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
+  if (hFile == INVALID_HANDLE_VALUE) {
+    return 0;
+  }
   DWORD dwFileSize = ::GetFileSize(hFile, NULL); // 获取文件大小
   ::CloseHandle(hFile);
   return size_t(dwFileSize);
 }
+
+inline bool Access(const char *filename, int type = 0) {
+  return _access(filename, type) == 0;
+}
 #else
-inline bool IsDir(const char *path) {
+inline bool IsDir(const char *filename) {
   struct stat statbuf;
-  if (stat(path, &statbuf) != 0) {
+  if (stat(filename, &statbuf) != 0) {
     return false;
   }
   return S_ISDIR(statbuf.st_mode) != 0;
@@ -40,6 +47,10 @@ inline size_t Size(const char *filename) {
   struct stat mystat;
   stat(filename, &mystat);
   return size_t(mystat.st_size);
+}
+
+inline bool Access(const char *filename, int type = 0) {
+  return access(filename, type) == 0;
 }
 #endif
 } // namespace libfile
