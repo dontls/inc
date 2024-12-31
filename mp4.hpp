@@ -75,6 +75,6 @@ inline int Writer::WriteVideo(int64_t ts, bool iskey, char *data, size_t len) {
   // mdat数据
   uint32_t slen = Htobe32(u32(len));
   fwrite(&slen, sizeof(uint32_t), 1, file_);
-  return fwrite(ptr, len, 1, file_);
+  return int(fwrite(ptr, len, 1, file_));
 }
 } // namespace libmp4

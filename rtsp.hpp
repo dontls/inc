@@ -450,8 +450,6 @@ inline const char *Format(int type) {
   return "";
 }
 
-#define PKG_LEN 2048
-
 class Client : libnet::TcpConn {
 private:
   int cmd_;
@@ -538,13 +536,13 @@ public:
 private:
   template <class... Args> void doWriteCmd(int type, Args... args) {
     cmd_ = type;
-    char buf[PKG_LEN] = {0};
+    char buf[2048] = {0};
     if (type == SETUP && sdp_.session.empty()) {
       type = SETUP_NOSS;
     }
     sprintf(buf, Format(type), url_.path.c_str(), args...);
     LibRtspDebug("\nwrite --> \n%s", buf);
-    Write(buf, strlen(buf));
+    Write(buf, int(strlen(buf)));
   }
 
   int doRtspParse(char *b) {
@@ -555,7 +553,7 @@ private:
       res.emplace_back(s);
       ptr = ptr1 + 2;
     }
-    int len = ptr - b;
+    int len = int(ptr - b);
     b[len - 1] = '\0';
     LibRtspDebug("%d read --> \n%s\n", len, b);
     switch (cmd_) {
