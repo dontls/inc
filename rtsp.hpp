@@ -1,5 +1,5 @@
 #pragma once
-#include "buffer.hpp"
+#include "rtp.hpp"
 #include "socket.hpp"
 #include "time.hpp"
 #include "crypto/base64.h"
@@ -28,8 +28,6 @@
 #endif
 
 namespace librtsp {
-
-static char _nalu_header[] = {0x00, 0x00, 0x00, 0x01};
 
 inline std::string findVar(std::string &str, const char *s, const char *e) {
   auto p0 = str.find(s);
@@ -206,165 +204,6 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
   }
 }
 
-inline uint16_t GetUint16(uint8_t *b) { return uint16_t(b[0]) << 8 | b[1]; }
-
-inline uint32_t GetUint32(uint8_t *b) {
-  return uint32_t(b[0]) << 24 | uint32_t(b[0]) << 16 | uint32_t(b[2]) << 8 |
-         b[3];
-}
-struct rtp {
-  /* byte 0 */
-  uint8_t csrcLen : 4;
-  uint8_t extension : 1;
-  uint8_t padding : 1;
-  uint8_t version : 2;
-  /* byte 1 */
-  uint8_t payloadType : 7;
-  uint8_t marker : 1;
-  /* bytes 2,3 */
-  uint16_t seq;
-  /* bytes 4-7 */
-  unsigned int timestamp;
-  /* bytes 8-11 */
-  uint32_t ssrc;
-  // payload
-  uint8_t *data;
-  // payload size
-  int size;
-  // 自定义frame type
-  uint8_t ftype;
-  void Unmarshal(uint8_t *b, int len);
-};
-
-inline void rtp::Unmarshal(uint8_t *b, int len) {
-  this->csrcLen = b[0] >> 4;
-  this->extension = (b[0] >> 3) & 0x01;
-  this->padding = (b[0] >> 2) & 0x01;
-  this->version = b[0] & 0x03;
-  this->payloadType = b[1] & 0x7F;
-  this->marker = b[1] >> 7;
-  this->seq = GetUint16(&b[2]);
-  this->timestamp = GetUint32(&b[4]);
-  this->ssrc = GetUint32(&b[8]);
-  this->data = b + 12;
-  this->size = len - 12;
-  this->ftype = 3;
-}
-
-static uint8_t Unmarshal264(sdp &s, rtp *r, libyte::Buffer &b) {
-  uint8_t sflag = 0, ntype = r->data[1], flag = r->data[0] & 0x1f;
-  if (flag == 28) {
-    sflag = (ntype & 0x80) | (ntype & 0x40);
-    ntype -= sflag;
-    r->data += 2;
-    r->size -= 2;
-  } else {
-    b.Write(_nalu_header, 4);
-    ntype = r->data[0];
-  }
-  ntype = ntype & 0x1F;
-  // 开始或这单独结束包
-  if (flag == 28 && sflag & 0x80) {
-    // rtp中无sps
-    if (ntype == 5 && b.Empty()) {
-      b.Write(s.spsvalue);
-    }
-    b.Write(_nalu_header, 4);
-    b.Write(uint8_t(ntype | 0x60));
-  }
-  b.Write((char *)r->data, r->size);
-  if (r->marker == 1 && (ntype == 1 || ntype == 5)) {
-    r->ftype = ntype;
-    sflag = 0x40;
-  }
-  // printf("rtp size %d %d %ld\n", r->size, ntype, b.Len());
-  return sflag;
-}
-
-// NOTE. sps/vps/pps没有和i帧合并
-static uint8_t Unmarshal265(sdp &s, rtp *r, libyte::Buffer &b) {
-  uint8_t sflag = 0, ntype = 0, flag = r->data[0] >> 1;
-  if (flag == 49) {
-    ntype = r->data[2];
-    sflag = (ntype & 0x80) | (ntype & 0x40);
-    ntype -= sflag;
-    r->data += 3;
-    r->size -= 3;
-  } else {
-    ntype = r->data[0];
-    b.Write(_nalu_header, 4);
-  }
-  // 开始或这单独结束包
-  if (flag == 49 && sflag & 0x80) {
-    ntype = ntype << 1;
-    uint8_t t = (ntype & 0x7e) >> 1;
-    if (t == 19 && b.Empty()) {
-      b.Write(s.spsvalue);
-    }
-    b.Write(_nalu_header, 4);
-    b.Write(ntype);
-    b.Write(uint8_t(0x01));
-  }
-  ntype = (ntype & 0x7e) >> 1;
-  b.Write((char *)r->data, r->size);
-  // printf("rtp size %d %ld\n", r->size, b.Len());
-  if (r->marker == 1 && (ntype == 1 || ntype == 19)) {
-    r->ftype = ntype;
-    sflag = 0x40;
-  }
-  return sflag;
-}
-
-struct rtcp_rb {
-  unsigned int ssrc;         /* data source being reported */
-  unsigned int fraction : 8; /* fraction lost since last SR/RR */
-  int lost : 24;             /* cumul. no. pkts lost (signed!) */
-  unsigned int last_seq;     /* extended last seq. no. received */
-  unsigned int jitter;       /* interarrival jitter */
-  unsigned int lsr;          /* last SR packet from this source */
-  unsigned int dlsr;         /* delay since last SR packet */
-};
-
-struct rtcp {
-  unsigned int version : 2; /* protocol version */
-  unsigned int p : 1;       /* padding flag */
-  unsigned int count : 5;   /* varies by packet type */
-  unsigned int pt : 8;      /* RTCP packet type
-  abbrev.  name                 value
-  SR       sender report          200
-  RR       receiver report        201
-  SDES     source description     202
-  BYE      goodbye                203
-  APP      application-defined    204*/
-  unsigned short length;    /* pkt len in words, w/o this word */
-  union {
-    /* sender report (SR) */
-    struct {
-      unsigned int ssrc;     /* sender generating this report */
-      unsigned int ntp_sec;  // NTP timestamp   <--| These are the only
-      unsigned int ntp_frac; //                 <--| additional 20-bytes
-      unsigned int rtp_ts;   // RTP timestamp   <--| fields besides
-      unsigned int psent;    // packets sent    <--| the RR
-      unsigned int osent;    // octets sent     <--| header.
-      struct rtcp_rb rb;     /* variable-length list */
-    } sr;
-
-    /* reception report (RR) */
-    struct {
-      unsigned int ssrc; /* receiver generating this report */
-      struct rtcp_rb rb; /* variable-length list */
-    } rr;
-    /* BYE */
-    struct {
-      unsigned int ssrc; /* list of sources */
-
-      // OPTIONAL reason for leaving and length of reason in bytes
-      unsigned int length : 8;
-      unsigned char reason[256];
-    } bye;
-  } r;
-};
-
 enum {
   OPTIONS,
   DESCRIBE,
@@ -465,16 +304,15 @@ class Client : libnet::TcpConn {
 private:
   int cmd_;
   int seq_;
-  rtp rtp_;
   uint8_t atype_; // audio rtp type
   url url_;
   sdp sdp_;
   libyte::Buffer dbuf_;
-  std::function<uint8_t(sdp &, rtp *, libyte::Buffer &)> decode_;
+  std::function<uint8_t(std::string &, librtp::Packet *, libyte::Buffer &)>
+      decode_;
 
 public:
-  Client(bool reqAudio = false)
-      : cmd_(0), seq_(0), rtp_{0}, OnRTPAnyPacket(nullptr) {
+  Client(bool reqAudio = false) : cmd_(0), seq_(0), OnRTPAnyPacket(nullptr) {
     atype_ = reqAudio ? 0xff : 0;
   }
   ~Client() { Close(); }
@@ -502,36 +340,38 @@ public:
             return doRtspParse((char *)b, blen + 4);
           }
           uint8_t ch = b[1];
-          int dlen = GetUint16(&b[2]);
+          int dlen = Uint16(&b[2]);
           if (blen < dlen) {
             return 0;
           }
           if (OnRTPAnyPacket) {
             this->OnRTPAnyPacket(b, dlen + 4);
           }
-          rtp_.Unmarshal(b + 4, dlen);
+          auto rtp = librtp::Unmarshal(b + 4, dlen);
           if (callFrame) {
-            uint8_t code = 0;
-            if (rtp_.payloadType == 96 || rtp_.payloadType == 98) {
-              code = this->decode_(sdp_, &rtp_, dbuf_);
-              rtp_.ftype = rtp_.ftype == 1 ? 2 : 1;
-            } else if (rtp_.payloadType == atype_) {
-              code = 0x40;
-              dbuf_.Write((char *)rtp_.data, rtp_.size);
+            uint8_t ftype = 0;
+            if (rtp.payloadType == 96 || rtp.payloadType == 98) {
+              ftype = this->decode_(sdp_.spsvalue, &rtp, dbuf_);
+              if (ftype > 0) {
+                ftype = ftype == 1 ? 2 : 1;
+              }
+            } else if (rtp.payloadType == atype_) {
+              ftype = 3;
+              dbuf_.Write((char *)rtp.data, rtp.size);
             }
-            if (code & 0x40) {
-              auto fmt = sdp_.formats[rtp_.payloadType];
-              callFrame(fmt.c_str(), rtp_.ftype, dbuf_.Bytes(), dbuf_.Len());
+            if (ftype > 0) {
+              auto fmt = sdp_.formats[rtp.payloadType];
+              callFrame(fmt.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
               dbuf_.Reset(0);
             }
           } else {
-            LibRtspDebug("%u rtp type %d channel %d, %d\n", rtp_.timestamp,
-                         rtp_.payloadType, ch, dlen);
+            LibRtspDebug("%u rtp type %d channel %d, %d\n", rtp.timestamp,
+                         rtp.payloadType, ch, dlen);
           }
           // 保活机制
           if (libtime::Since(ts) > 10000) {
             ts = libtime::UnixMilli();
-            this->keepalive();
+            this->doKeepalive(&rtp);
           }
           return dlen + 4;
         },
@@ -556,14 +396,14 @@ private:
     Write(buf, int(strlen(buf)));
   }
 
-  void keepalive() {
+  void doKeepalive(librtp::Packet *rtp) {
     doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
                url_.GetAuth("GET_PARAMETER").c_str());
-    // rtcp pkt{0};
+    // librtcp::Packet pkt{0};
     // pkt.pt = 200;
-    // pkt.r.sr.rtp_ts = rtp_.timestamp;
-    // pkt.r.sr.rb.ssrc = rtp_.seq;
-    // this->Write((char *)&pkt, sizeof(rtcp));
+    // pkt.r.sr.rtp_ts = rtp->timestamp;
+    // pkt.r.sr.rb.ssrc = rtp->seq;
+    // this->Write((char *)&pkt, sizeof(pkt));
   }
 
   int doRtspParse(char *b, int len) {
@@ -614,8 +454,8 @@ private:
                               return m.name.find("video") != std::string::npos;
                             });
       this->decode_ = (m->rtpmap.find("H265") != std::string::npos)
-                          ? Unmarshal265
-                          : Unmarshal264;
+                          ? librtp::h265::Unmarshal
+                          : librtp::h264::Unmarshal;
       doWriteCmd(SETUP, m->id.c_str(), seq_++, sdp_.session.c_str(),
                  url_.GetAuth("SETUP").c_str());
       cmd_ = SETAUDIO;
