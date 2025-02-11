@@ -4,6 +4,7 @@
 #include "time.hpp"
 #include "crypto/base64.h"
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <sstream>
@@ -13,7 +14,12 @@
 #include <map>
 #include <functional>
 
+#ifdef NDEBUG
+#define LibRtspDebug
+#else
 #define LibRtspDebug printf
+#endif
+
 #define SUPPORT_DIGEST 1
 #define USER_AGENT "github/dontls"
 
@@ -126,6 +132,7 @@ inline std::string url::GetAuth(std::string type) {
 }
 
 struct sdp {
+  std::string content;
   std::string session;
   struct media {
     int format; // 96 /98
@@ -162,6 +169,10 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
         it->sprops = s.substr(pos);
       } else if ((pos = s.find("a=control:")) != std::string::npos) {
         it->id = s.substr(pos + 10);
+        auto pos = it->id.rfind("/");
+        if (pos != std::string::npos) {
+          it->id = it->id.substr(pos + 1);
+        }
       }
     }
   }
@@ -213,7 +224,7 @@ struct rtp {
   /* bytes 2,3 */
   uint16_t seq;
   /* bytes 4-7 */
-  uint32_t timestamp;
+  unsigned int timestamp;
   /* bytes 8-11 */
   uint32_t ssrc;
   // payload
@@ -462,15 +473,18 @@ private:
   std::function<uint8_t(sdp &, rtp *, libyte::Buffer &)> decode_;
 
 public:
-  Client(bool reqAudio = false) : cmd_(0), seq_(0), rtp_{0} {
+  Client(bool reqAudio = false)
+      : cmd_(0), seq_(0), rtp_{0}, OnRTPAnyPacket(nullptr) {
     atype_ = reqAudio ? 0xff : 0;
   }
   ~Client() { Close(); }
-  using FrameCallack = std::function<void(const char *format, uint8_t type,
-                                          char *data, size_t length)>;
+  // 转发rtp包代理
+  std::function<void(uint8_t *, size_t)> OnRTPAnyPacket;
+  // 解析帧
+  using OnFrame = std::function<void(const char *, uint8_t, char *, size_t)>;
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
-  bool Play(const char *sUrl, FrameCallack callback = nullptr) {
-    if (url_.Parse(sUrl) == false) {
+  bool Play(const char *sUrl, OnFrame callFrame) {
+    if (!url_.Parse(sUrl)) {
       return false;
     }
     Dial(url_.ip.c_str(), url_.port);
@@ -485,42 +499,39 @@ public:
           uint8_t *b = (uint8_t *)buf.Bytes();
           if (b[0] != '$') {
             // GET_PARAMETER response
-            return doRtspParse((char *)b);
+            return doRtspParse((char *)b, blen + 4);
           }
           uint8_t ch = b[1];
           int dlen = GetUint16(&b[2]);
           if (blen < dlen) {
             return 0;
           }
-          rtp_.Unmarshal(b + 4, dlen);
-          uint8_t code = 0;
-          if (rtp_.payloadType == 96 || rtp_.payloadType == 98) {
-            code = this->decode_(sdp_, &rtp_, dbuf_);
-            rtp_.ftype = rtp_.ftype == 1 ? 2 : 1;
-          } else if (rtp_.payloadType == atype_) {
-            code = 0x40;
-            dbuf_.Write((char *)rtp_.data, rtp_.size);
+          if (OnRTPAnyPacket) {
+            this->OnRTPAnyPacket(b, dlen + 4);
           }
-          if (code & 0x40) {
-            auto fmt = sdp_.formats[rtp_.payloadType];
-            if (callback) {
-              callback(fmt.c_str(), rtp_.ftype, dbuf_.Bytes(), dbuf_.Len());
-            } else {
-              LibRtspDebug("rtp type %d channel %d, %ld\n", rtp_.payloadType,
-                           ch, dbuf_.Len());
+          rtp_.Unmarshal(b + 4, dlen);
+          if (callFrame) {
+            uint8_t code = 0;
+            if (rtp_.payloadType == 96 || rtp_.payloadType == 98) {
+              code = this->decode_(sdp_, &rtp_, dbuf_);
+              rtp_.ftype = rtp_.ftype == 1 ? 2 : 1;
+            } else if (rtp_.payloadType == atype_) {
+              code = 0x40;
+              dbuf_.Write((char *)rtp_.data, rtp_.size);
             }
-            dbuf_.Reset(0);
+            if (code & 0x40) {
+              auto fmt = sdp_.formats[rtp_.payloadType];
+              callFrame(fmt.c_str(), rtp_.ftype, dbuf_.Bytes(), dbuf_.Len());
+              dbuf_.Reset(0);
+            }
+          } else {
+            LibRtspDebug("%u rtp type %d channel %d, %d\n", rtp_.timestamp,
+                         rtp_.payloadType, ch, dlen);
           }
           // 保活机制
           if (libtime::Since(ts) > 10000) {
             ts = libtime::UnixMilli();
-            // doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
-            //            url_.GetAuth("GET_PARAMETER").c_str());
-            rtcp pkt{0};
-            pkt.pt = 200;
-            pkt.r.sr.rtp_ts = rtp_.timestamp;
-            pkt.r.sr.rb.ssrc = rtp_.seq;
-            this->Write((char *)&pkt, sizeof(rtcp));
+            this->keepalive();
           }
           return dlen + 4;
         },
@@ -545,17 +556,40 @@ private:
     Write(buf, int(strlen(buf)));
   }
 
-  int doRtspParse(char *b) {
+  void keepalive() {
+    doWriteCmd(GET_PARAMETER, seq_++, sdp_.session.c_str(),
+               url_.GetAuth("GET_PARAMETER").c_str());
+    // rtcp pkt{0};
+    // pkt.pt = 200;
+    // pkt.r.sr.rtp_ts = rtp_.timestamp;
+    // pkt.r.sr.rb.ssrc = rtp_.seq;
+    // this->Write((char *)&pkt, sizeof(rtcp));
+  }
+
+  int doRtspParse(char *b, int len) {
+    char *h0 = strstr(b, "\r\n\r\n");
+    if (h0 == nullptr) {
+      return 0;
+    }
+    int hlen = int(h0 - b) + 4;
+    std::string hs(b, hlen);
+    int dlen = std::atoi(findVar(hs, "Content-Length: ", "\r\n").c_str());
+    if (dlen + hlen > len) {
+      return 0;
+    }
+    len = hlen;
+    if (dlen > 0) {
+      len += dlen;
+      hs = std::string(b, len);
+    }
     std::vector<std::string> res;
-    char *ptr = b, *ptr1 = nullptr;
+    char *ptr = (char *)hs.c_str(), *ptr1 = nullptr;
     while ((ptr1 = strstr(ptr, "\r\n"))) {
       std::string s(ptr, ptr1 - ptr);
       res.emplace_back(s);
       ptr = ptr1 + 2;
     }
-    int len = int(ptr - b);
-    b[len - 1] = '\0';
-    LibRtspDebug("%d read --> \n%s\n", len, b);
+    LibRtspDebug("%d read --> \n%s", len, hs.c_str());
     switch (cmd_) {
     case OPTIONS: {
       auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
@@ -573,6 +607,7 @@ private:
       break;
     };
     case DESCRIBE: {
+      sdp_.content = hs.substr(hlen);
       sdp_.Parse(res);
       auto m = std::find_if(sdp_.medias.begin(), sdp_.medias.end(),
                             [](sdp::media &m) {
@@ -614,9 +649,8 @@ private:
                  url_.GetAuth("PLAY").c_str());
       break;
     default:
-      return len;
+      break;
     }
-    memset(b, 0, len);
     return len;
   }
 };
