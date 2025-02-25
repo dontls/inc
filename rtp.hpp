@@ -146,10 +146,10 @@ static uint8_t Unmarshal(std::string &e, Packet *r, libyte::Buffer &b) {
     b.Write(ntype);
     b.Write(uint8_t(0x01));
   }
-  ntype = (ntype & 0x7e) >> 1;
   b.Write((char *)r->data, r->size);
   // printf("rtp size %d %ld\n", r->size, b.Len());
-  if (r->marker == 1 && (ntype == 1 || ntype == 19)) {
+  if (r->marker == 1 && (sflag & 0x40) > 0) {
+    ntype = (b.Bytes()[4] & 0x7e) >> 1;
     return ntype;
   }
   return 0;

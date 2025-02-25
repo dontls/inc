@@ -167,7 +167,7 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
         it->sprops = s.substr(pos);
       } else if ((pos = s.find("a=control:")) != std::string::npos) {
         it->id = s.substr(pos + 10);
-        auto pos = it->id.rfind("/");
+        pos = s.rfind("/");
         if (pos != std::string::npos) {
           it->id = it->id.substr(pos + 1);
         }
@@ -175,13 +175,13 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
     }
   }
   auto m = std::find_if(medias.begin(), medias.end(), [](sdp::media &m) {
-    return m.id.find("video") != std::string::npos;
+    return m.name.find("video") != std::string::npos;
   });
   if (m == medias.end()) {
     return;
   }
   std::string sps, pps, vps;
-  if (m->rtpmap.find("H264") != std::string::npos) {
+  if (m->format == 96) {
     // sprop-parameter-sets=
     sps = findVar(m->sprops, "sprop-parameter-sets=", ",");
     pps = findVar(m->sprops, ",", ",");
@@ -209,6 +209,7 @@ enum {
   DESCRIBE,
   SETUP,
   PLAY,
+  SCALE,
   GET_PARAMETER,
   SET_PARAMETER,
   PAUSE,
@@ -255,7 +256,15 @@ inline const char *Format(int type) {
            "Session: %s\r\n"
            "%s" // Authorization
            "User-Agent: " USER_AGENT "\r\n"
-           "Range: npt=0.000-\r\n"
+           "Range: npt=%0.3f-\r\n"
+           "\r\n";
+  case SCALE:
+    return "PLAY %s RTSP/1.0\r\n"
+           "CSeq: %d\r\n"
+           "Session: %s\r\n"
+           "%s" // Authorization
+           "User-Agent: " USER_AGENT "\r\n"
+           "Scale: %0.1f\r\n"
            "\r\n";
   case PAUSE:
     return "PAUSE %s RTSP/1.0\r\n"
@@ -486,7 +495,7 @@ private:
     }
     case SETUP:
       doWriteCmd(PLAY, seq_++, sdp_.session.c_str(),
-                 url_.GetAuth("PLAY").c_str());
+                 url_.GetAuth("PLAY").c_str(), 0);
       break;
     default:
       break;
