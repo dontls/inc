@@ -6,7 +6,10 @@
 #else
 #include <unistd.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #endif
+#include <string.h>
+#include <functional>
 
 namespace libfile {
 #ifdef _WIN32
@@ -34,6 +37,25 @@ inline size_t Size(const char *filename) {
 inline bool Access(const char *filename, int type = 0) {
   return _access(filename, type) == 0;
 }
+
+inline void Walk(const char *path, std::function<void(const char *)> const &f) {
+  // Windows 实现
+  WIN32_FIND_DATAA findData;
+  std::string _path(path);
+  HANDLE hFind = FindFirstFileA((_path + "\\*").c_str(), &findData);
+  if (hFind == INVALID_HANDLE_VALUE) {
+    return; // 错误处理
+  }
+  while (FindNextFileA(hFind, &findData) != 0) {
+    if (strcmp(findData.cFileName, ".") == 0 ||
+        strcmp(findData.cFileName, "..") == 0) {
+      continue;
+    }
+    f((const char *)findData.cFileName);
+  }
+  FindClose(hFind);
+}
+
 #else
 inline bool IsDir(const char *filename) {
   struct stat statbuf;
@@ -51,6 +73,20 @@ inline size_t Size(const char *filename) {
 
 inline bool Access(const char *filename, int type = 0) {
   return access(filename, type) == 0;
+}
+
+inline void Walk(const char *path, std::function<void(const char *)> const &f) {
+  DIR *dir = opendir(path);
+  if (!dir) {
+    return;
+  }
+  struct dirent *entry = NULL;
+  while ((entry = readdir(dir)) != NULL) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+      continue;
+    f(entry->d_name);
+  }
+  closedir(dir);
 }
 #endif
 } // namespace libfile
