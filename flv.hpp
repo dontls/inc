@@ -2,6 +2,7 @@
 
 #include "buffer.hpp"
 #include "sps.hpp"
+#include "slice.hpp"
 
 namespace libflv {
 
@@ -190,7 +191,7 @@ inline libyte::Buffer *Packet::Marshal(std::string &s) {
 }
 
 inline libyte::Slice Packet::Pack(int tag, uint32_t ts) {
-  libyte::Slice s;
+  libyte::Slice s{};
   size_t dlen = buf_.Len() - offset_ + 11;
   s.data = buf_.Bytes() + offset_ - 11;
   int i = 0;

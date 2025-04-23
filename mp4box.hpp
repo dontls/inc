@@ -602,7 +602,7 @@ private:
   std::string stsdv_;
 
 public:
-  Trak() : id_(0), trak_{0}, stbl{0}, firts_(0), lsts_(0), count_(0) {}
+  Trak() : id_(0), trak_{}, stbl{}, firts_(0), lsts_(0), count_(0) {}
   ~Trak() {}
   void AppendSample(int64_t ts, u32 &offset, u32 length);
   u32 MakeVideo(nalu::Vector &nalus);

@@ -315,9 +315,7 @@ public:
   // Purpose:     To initialize the socket exception with a specific
   //              error code.
   // ====================================================================
-  Exception(Error p_code) {
-    m_code = p_code;
-  }
+  Exception(Error p_code) { m_code = p_code; }
 
   // ====================================================================
   // Function:    Error
@@ -530,7 +528,8 @@ protected:
                      // blocking or not.
 };
 
-inline Socket::Socket(socket_t p_socket) : m_sock(p_socket) {
+inline Socket::Socket(socket_t p_socket)
+    : m_sock(p_socket), m_localinfo{}, m_isblocking(false) {
   if (p_socket != INVALID_SOCKET) {
     socklen_t s = sizeof(m_localinfo);
     getsockname(p_socket, (sockaddr *)(&m_localinfo), &s);
@@ -621,7 +620,7 @@ private:
 #ifdef __linux__
     nsocket += 1;
 #endif // __linux__
-    fd_set fd;
+    fd_set fd{};
     fd_set *fdr = NULL, *fdw = NULL;
     isread ? fdr = &fd : fdw = &fd;
     while (1) {
@@ -643,7 +642,7 @@ private:
 };
 
 inline TcpConn::TcpConn(socket_t p_socket)
-    : Socket(p_socket), m_connected(false) {
+    : Socket(p_socket), m_connected(false), m_remoteinfo{} {
   if (p_socket != INVALID_SOCKET) {
     socklen_t s = sizeof(m_remoteinfo);
     getpeername(p_socket, (sockaddr *)(&m_remoteinfo), &s);

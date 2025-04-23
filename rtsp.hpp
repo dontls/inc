@@ -14,11 +14,7 @@
 #include <map>
 #include <functional>
 
-#ifdef NDEBUG
-#define LibRtspDebug
-#else
-#define LibRtspDebug printf
-#endif
+#define LibRtspDebug // printf
 
 #define SUPPORT_DIGEST 1
 #define USER_AGENT "github/dontls"
@@ -167,8 +163,7 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
         it->sprops = s.substr(pos);
       } else if ((pos = s.find("a=control:")) != std::string::npos) {
         it->id = s.substr(pos + 10);
-        pos = s.rfind("/");
-        if (pos != std::string::npos) {
+        if ((pos = it->id.rfind("/")) != std::string::npos) {
           it->id = it->id.substr(pos + 1);
         }
       }
@@ -326,9 +321,10 @@ public:
   }
   ~Client() { Close(); }
   // 转发rtp包代理
-  std::function<void(uint8_t *, size_t)> OnRTPAnyPacket;
+  std::function<void(uint8_t *, int)> OnRTPAnyPacket;
   // 解析帧
-  using OnFrame = std::function<void(const char *, uint8_t, char *, size_t)>;
+  using OnFrame = std::function<void(const char *, uint8_t, libyte::Buffer &)>;
+
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl, OnFrame callFrame) {
     if (!url_.Parse(sUrl)) {
@@ -369,14 +365,13 @@ public:
               dbuf_.Write((char *)rtp.data, rtp.size);
             }
             if (ftype > 0) {
-              auto fmt = sdp_.formats[rtp.payloadType];
-              callFrame(fmt.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
+              auto &fmt = sdp_.formats[rtp.payloadType];
+              callFrame(fmt.c_str(), ftype, dbuf_);
               dbuf_.Reset(0);
             }
-          } else {
-            LibRtspDebug("%u rtp type %d channel %d, %d\n", rtp.timestamp,
-                         rtp.payloadType, ch, dlen);
           }
+          LibRtspDebug("%u rtp type %d channel %d, %d\n", rtp.timestamp,
+                       rtp.payloadType, ch, dlen);
           // 保活机制
           if (libtime::Since(ts) > 10000) {
             ts = libtime::UnixMilli();
