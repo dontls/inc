@@ -14,7 +14,7 @@
 #include <map>
 #include <functional>
 
-#define LibRtspDebug // printf
+#define LibRtspDebug(fmt, ...) // printf(fmt, ##__VA_ARGS__)
 
 #define SUPPORT_DIGEST 1
 #define USER_AGENT "github/dontls"

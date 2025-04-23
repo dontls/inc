@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <string>
 
-#define LibMp4Debug printf
+#define LibMp4Debug(fmt, ...) // printf(fmt, ##__VA_ARGS__)
 
 namespace libmp4 {
 
