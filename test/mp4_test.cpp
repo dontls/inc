@@ -3,9 +3,9 @@
 #include "framefile.hpp"
 
 int main(int argc, char const *argv[]) {
-  libfmp4::Writer w("1080p.mp4");
+  libfile::FMp4 mp4file("1080p.mp4");
   long ts = 100000;
-  FrameFile ffile;
+  libfile::Frame ffile;
   ffile.Open("1080p.h264");
   for (;;) {
     int len, ftype;
@@ -14,7 +14,7 @@ int main(int argc, char const *argv[]) {
       break;
     }
     // printf("length %d\n", offset);
-    if (w.WriteVideo(ts, ftype == 1, b, len) < 0) {
+    if (mp4file.Write(ts, ftype == 1, b, len) < 0) {
       break;
     }
     ts += 40;

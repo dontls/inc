@@ -159,11 +159,12 @@ inline const char *stsda::Marshal(char *aacspec) {
   size = Htobe32_Sizeof(stsda);
   type = Le32Type("stsd");
   entry_count = Htobe32(1);
-  // avc1.type = Le32Type("avc1"); // 外部赋值
   mp4a.size = Htobe32_Sizeof(mp4a);
   mp4a.type = Le32Type("mp4a");
-  mp4a.data_refidx = (u16)(Htobe32(1) >> 16);
-  // mp4a.channel_num =
+  mp4a.data_refidx = u16(Htobe32(1) >> 16);
+  mp4a.channel_num = u16(Htobe32(1) >> 16);
+  mp4a.sample_size = u16(Htobe32(16) >> 16);
+  mp4a.sample_rate = Htobe32(u32(8000) << 16);
   mp4a.esds.size = Htobe32_Sizeof(mp4a.esds);
   mp4a.esds.type = Le32Type("esds");
   mp4a.esds.esdesc_tag = 0x03;
@@ -454,8 +455,6 @@ inline void *moov::Marshal(u32 len1, u32 len2) {
   mvhd.volume = u16(Htobe32(1));
   Matrix(mvhd.matrix);
   if (len2 > 0) {
-    mvhd.next_trackid = Htobe32(3);
-  } else {
     mvhd.next_trackid = Htobe32(2);
   }
   return this;
@@ -671,7 +670,6 @@ inline u32 Trak::MakeVideo(nalu::Vector &nalus) {
 }
 
 inline u32 Trak::MakeAudio(char *accspec) {
-  assert(id_ == 0);
   id_ = 2;
   box::stsda stsd;
   stsdv_.append(stsd.Marshal(accspec), sizeof(box::stsda));

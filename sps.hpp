@@ -401,7 +401,7 @@ typedef std::vector<Value> Vector;
 #define FIXED_LEN 4
 
 // 返回下个nalu开始的位置，length剩余数据长度
-inline char *Split(char *data, size_t &length, Vector &nalus) {
+inline char *Split(char *data, int &length, Vector &nalus) {
   if (length <= 0) {
     return nullptr;
   }
