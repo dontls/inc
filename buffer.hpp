@@ -33,6 +33,8 @@ public:
   // 写入
   size_t Write(const char *s) { return Write((char *)s, strlen(s)); }
   // 写入
+  size_t WriteByte(uint8_t b) { return Write((char *)&b, 1); }
+  // 写入
   template <typename T> size_t Write(T b) {
     return Write((char *)&b, sizeof(T));
   }

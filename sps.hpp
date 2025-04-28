@@ -406,7 +406,7 @@ inline char *Split(char *data, int &length, Vector &nalus) {
     return nullptr;
   }
   char *ptr = data;
-  size_t i = FIXED_LEN;
+  int i = FIXED_LEN;
   for (; (i + FIXED_LEN) < length; i++) {
     if (ptr[i] == 0x00 && ptr[i + 1] == 0x00 && ptr[i + 2] == 0x00 &&
         ptr[i + 3] == 0x01) {

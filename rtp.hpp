@@ -73,7 +73,7 @@ static uint8_t Unmarshal(std::string &e, Packet *r, libyte::Buffer &b) {
       b.Write(e);
     }
     b.Write(_nalu_header, 4);
-    b.Write(uint8_t(ntype | 0x60));
+    b.WriteByte(ntype | 0x60);
   }
   b.Write((char *)r->data, r->size);
   if (r->marker == 1 && (ntype == 1 || ntype == 5)) {
@@ -143,8 +143,8 @@ static uint8_t Unmarshal(std::string &e, Packet *r, libyte::Buffer &b) {
       b.Write(e);
     }
     b.Write(_nalu_header, 4);
-    b.Write(ntype);
-    b.Write(uint8_t(0x01));
+    b.WriteByte(ntype);
+    b.WriteByte(0x01);
   }
   b.Write((char *)r->data, r->size);
   // printf("rtp size %d %ld\n", r->size, b.Len());
