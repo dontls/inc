@@ -31,9 +31,9 @@ private:
 inline size_t Mp4::WriteBoxFtyp(nalu::Vector &nalus) {
   libmp4::box::ftyp ftyp;
   ftyp.compat3 = trakv_.MakeVideo(nalus);
-  unsigned char aac[] = {0xAF, 0x00, 0x15, 0x90};
-  traka_.MakeAudio((char *)aac);
-  mdat_.type = libmp4::Le32Type("mdat");
+  unsigned char aac[] = {0x15, 0x90};
+  traka_.MakeAudio(nullptr);
+  mdat_.type = libmp4::LE32TYPE("mdat");
   // 未转换，sample写入计数
   mdat_.size = sizeof(libmp4::box::ftyp) + sizeof(libmp4::box::mdat);
   fwrite(ftyp.Marshal(), sizeof(ftyp), 1, file_);
@@ -50,7 +50,7 @@ inline size_t Mp4::WriteBoxMoov() {
   fwrite(traka_.Value(), len1, 1, file_);
   //  mdat 头
   fseek(file_, sizeof(libmp4::box::ftyp), SEEK_SET);
-  mdat_.size = libmp4::Htobe32(mdat_.size - sizeof(libmp4::box::ftyp));
+  mdat_.size = libmp4::HTOBE32(mdat_.size - sizeof(libmp4::box::ftyp));
   return fwrite(&mdat_, sizeof(mdat_), 1, file_);
 }
 
@@ -78,7 +78,7 @@ inline int Mp4::Write(int64_t ts, bool bkey, char *data, int len) {
   // stbl信息
   trakv_.AppendSample(ts, mdat_.size, u32(len + 4));
   // mdat数据
-  uint32_t slen = libmp4::Htobe32(u32(len));
+  uint32_t slen = libmp4::HTOBE32(u32(len));
   fwrite(&slen, sizeof(uint32_t), 1, file_);
   return int(fwrite(ptr, len, 1, file_));
 }
@@ -91,7 +91,7 @@ inline int Mp4::Write(int64_t ts, char *data, int len) {
   // stbl信息
   traka_.AppendSample(ts, mdat_.size, u32(len + 4));
   // mdat数据
-  uint32_t slen = libmp4::Htobe32(u32(len));
+  uint32_t slen = libmp4::HTOBE32(u32(len));
   fwrite(&slen, sizeof(uint32_t), 1, file_);
   return int(fwrite(data, len, 1, file_));
 }

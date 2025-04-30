@@ -27,13 +27,13 @@ struct mvex {
 };
 
 inline void *mvex::Marshal() {
-  size = libmp4::Htobe32_Sizeof(mvex);
+  size = libmp4::HTOBE32_Sizeof(mvex);
   type = libmp4::Le32Type("mvex");
-  trex.size = libmp4::Htobe32_Sizeof(trex);
+  trex.size = libmp4::HTOBE32_Sizeof(trex);
   trex.type = libmp4::Le32Type("trex");
-  trex.verflags = libmp4::Htobe32(_version_flag(0, 0));
-  trex.default_sample_descriptionIndex = libmp4::Htobe32(1);
-  trex.track_id = libmp4::Htobe32(1);
+  trex.verflags = libmp4::HTOBE32(_version_flag(0, 0));
+  trex.default_sample_descriptionIndex = libmp4::HTOBE32(1);
+  trex.track_id = libmp4::HTOBE32(1);
   return this;
 }
 
@@ -80,33 +80,33 @@ struct moof {
 };
 
 inline void moof::Marshal(u32 trackId) {
-  size = libmp4::Htobe32(sizeof(moof) - sizeof(libmp4::box::mdat));
+  size = libmp4::HTOBE32(sizeof(moof) - sizeof(libmp4::box::mdat));
   type = libmp4::Le32Type("moof");
 
-  mfhd.size = libmp4::Htobe32_Sizeof(mfhd);
+  mfhd.size = libmp4::HTOBE32_Sizeof(mfhd);
   mfhd.type = libmp4::Le32Type("mfhd");
-  mfhd.verflags = libmp4::Htobe32(_version_flag(0, 0));
-  // mfhd.sequenceNumber = libmp4::Htobe32(seq);
+  mfhd.verflags = libmp4::HTOBE32(_version_flag(0, 0));
+  // mfhd.sequenceNumber = libmp4::HTOBE32(seq);
 
-  traf.size = libmp4::Htobe32_Sizeof(traf);
+  traf.size = libmp4::HTOBE32_Sizeof(traf);
   traf.type = libmp4::Le32Type("traf");
 
-  traf.tfhd.size = libmp4::Htobe32_Sizeof(traf.tfhd);
+  traf.tfhd.size = libmp4::HTOBE32_Sizeof(traf.tfhd);
   traf.tfhd.type = libmp4::Le32Type("tfhd");
-  traf.tfhd.verflags = libmp4::Htobe32(_version_flag(0, 0x020000));
-  traf.tfhd.trackId = libmp4::Htobe32(trackId);
+  traf.tfhd.verflags = libmp4::HTOBE32(_version_flag(0, 0x020000));
+  traf.tfhd.trackId = libmp4::HTOBE32(trackId);
 
-  traf.tfdt.size = libmp4::Htobe32_Sizeof(traf.tfdt);
+  traf.tfdt.size = libmp4::HTOBE32_Sizeof(traf.tfdt);
   traf.tfdt.type = libmp4::Le32Type("tfdt");
-  traf.tfdt.verflags = libmp4::Htobe32(_version_flag(0, 0));
-  // traf.tfdt.decode_time = libmp4::Htobe32(traf.tfdt.decode_time);
+  traf.tfdt.verflags = libmp4::HTOBE32(_version_flag(0, 0));
+  // traf.tfdt.decode_time = libmp4::HTOBE32(traf.tfdt.decode_time);
 
-  traf.trun.size = libmp4::Htobe32_Sizeof(traf.trun);
+  traf.trun.size = libmp4::HTOBE32_Sizeof(traf.trun);
   traf.trun.type = libmp4::Le32Type("trun");
-  traf.trun.verflags = libmp4::Htobe32(_version_flag(1, 0xf01));
-  traf.trun.data_offset = libmp4::Htobe32_Sizeof(moof); // moof+mdat_header
+  traf.trun.verflags = libmp4::HTOBE32(_version_flag(1, 0xf01));
+  traf.trun.data_offset = libmp4::HTOBE32_Sizeof(moof); // moof+mdat_header
 
-  traf.trun.sample_count = libmp4::Htobe32(1);
+  traf.trun.sample_count = libmp4::HTOBE32(1);
   traf.trun.sample.time_offset = 0;
 
   mdatv.type = libmp4::Le32Type("mdat");
@@ -162,7 +162,7 @@ inline void FMp4::Close() {
   if (file_) {
     // 更新时长
     u32 durOffset = sizeof(libmp4::box::ftyp) + 32;
-    u32 dur = libmp4::Htobe32(lsts_ - firts_);
+    u32 dur = libmp4::HTOBE32(lsts_ - firts_);
     fseek(file_, durOffset, SEEK_SET);
     fwrite(&dur, sizeof(u32), 1, file_);
     fclose(file_);
@@ -185,17 +185,17 @@ inline int FMp4::Write(int64_t ts, bool bkey, char *data, int len) {
     return 0;
   }
   // 写入moof
-  moofv_.mfhd.sequenceNumber = libmp4::Htobe32(seq_++);
-  moofv_.mdatv.size = libmp4::Htobe32(len + 4 + sizeof(libmp4::box::mdat));
-  moofv_.traf.tfdt.decode_time = libmp4::Htobe32(ts - firts_);
-  moofv_.traf.trun.sample.duration = libmp4::Htobe32(ts - lsts_);
-  moofv_.traf.trun.sample.size = libmp4::Htobe32(len + 4);
+  moofv_.mfhd.sequenceNumber = libmp4::HTOBE32(seq_++);
+  moofv_.mdatv.size = libmp4::HTOBE32(len + 4 + sizeof(libmp4::box::mdat));
+  moofv_.traf.tfdt.decode_time = libmp4::HTOBE32(ts - firts_);
+  moofv_.traf.trun.sample.duration = libmp4::HTOBE32(ts - lsts_);
+  moofv_.traf.trun.sample.size = libmp4::HTOBE32(len + 4);
   moofv_.traf.trun.sample.flags =
-      libmp4::Htobe32(bkey ? 0x02000000 : 0x00010000);
+      libmp4::HTOBE32(bkey ? 0x02000000 : 0x00010000);
   lsts_ = ts;
   fwrite(&moofv_, sizeof(box::moof), 1, file_);
   // 写入mdat
-  u32 slen = libmp4::Htobe32(len);
+  u32 slen = libmp4::HTOBE32(len);
   fwrite(&slen, sizeof(u32), 1, file_);
   return int(fwrite(ptr, len, 1, file_));
 }
@@ -206,15 +206,15 @@ inline int FMp4::Write(int64_t ts, char *data, int len) {
     return 0;
   }
   // 写入moof
-  moofa_.mfhd.sequenceNumber = libmp4::Htobe32(seq_++);
-  moofa_.mdatv.size = libmp4::Htobe32(len + 4 + sizeof(libmp4::box::mdat));
-  moofa_.traf.tfdt.decode_time = libmp4::Htobe32(ts - firts_);
-  moofa_.traf.trun.sample.duration = libmp4::Htobe32(ts - latas_);
-  moofa_.traf.trun.sample.size = libmp4::Htobe32(len + 4);
+  moofa_.mfhd.sequenceNumber = libmp4::HTOBE32(seq_++);
+  moofa_.mdatv.size = libmp4::HTOBE32(len + 4 + sizeof(libmp4::box::mdat));
+  moofa_.traf.tfdt.decode_time = libmp4::HTOBE32(ts - firts_);
+  moofa_.traf.trun.sample.duration = libmp4::HTOBE32(ts - latas_);
+  moofa_.traf.trun.sample.size = libmp4::HTOBE32(len + 4);
   latas_ = ts;
   fwrite(&moofv_, sizeof(box::moof), 1, file_);
   // 写入mdat
-  u32 slen = libmp4::Htobe32(len);
+  u32 slen = libmp4::HTOBE32(len);
   fwrite(&slen, sizeof(u32), 1, file_);
   return int(fwrite(data, len, 1, file_));
 }
