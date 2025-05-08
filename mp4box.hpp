@@ -136,19 +136,19 @@ struct stsda {
       u16 esdesc_id;    // 0x0200
       u8 esdesc_flags;  // 0x00
       u8 deccfg_tag;    // 0x04
-      u8 deccfg_len;    // 17
+      u16 deccfg_len;   // 17
       u8 deccfg_object; // 0x40 - aac, 0x6B - mp3
       u8 deccfg_stream; // 0x15
       u8 deccfg_buffer_size[3];
       u32 deccfg_max_bitrate;
       u32 deccfg_avg_bitrate;
       //++ if deccfg_object == aac
-      u8 decspec_tag; // 0x05
-      u8 decspec_len; // 2
-      u16 decspec_info;
-      //-- if deccfg_object == aac
+      // u8 decspec_tag; // 0x05
+      // u8 decspec_len; // 2
+      // u16 decspec_info;
+      // //-- if deccfg_object == aac
       u8 slcfg_tag;      // 0x06
-      u8 slcfg_len;      // 1
+      u16 slcfg_len;     // 1
       u8 slcfg_reserved; // 0x02
     } esds;
   } mp4a;
@@ -164,22 +164,22 @@ inline const char *stsda::Marshal(char *aacspec) {
   mp4a.data_refidx = u16(HTOBE32(1) >> 16);
   mp4a.channel_num = u16(HTOBE32(1) >> 16);
   mp4a.sample_size = u16(HTOBE32(16) >> 16);
-  mp4a.sample_rate = HTOBE32(u32(8000) << 16);
+  mp4a.sample_rate = HTOBE32(8000 << 16);
   mp4a.esds.size = HTOBE32_SIZEOF(mp4a.esds);
   mp4a.esds.type = LE32TYPE("esds");
   mp4a.esds.esdesc_tag = 0x03;
-  mp4a.esds.esdesc_len = ((25 << 8) | 0x80);
+  mp4a.esds.esdesc_len = u16(25 << 8 | 0x80);
   mp4a.esds.esdesc_id = 0x0200;
   mp4a.esds.esdesc_flags = 0x00;
   mp4a.esds.deccfg_tag = 0x04;
-  mp4a.esds.deccfg_len = 17;
+  mp4a.esds.deccfg_len = u16(17 << 8 | 0x80);
   mp4a.esds.deccfg_object = 0x40;
   mp4a.esds.deccfg_stream = 0x15;
-  mp4a.esds.decspec_tag = 0x05;
-  mp4a.esds.decspec_len = 2;
-  mp4a.esds.decspec_info = aacspec ? (aacspec[1] << 8) | (aacspec[0] << 0) : 0;
+  // mp4a.esds.decspec_tag = 0x05;
+  // mp4a.esds.decspec_len = 2;
+  // mp4a.esds.decspec_info = 0x0812;
   mp4a.esds.slcfg_tag = 0x06;
-  mp4a.esds.slcfg_len = 1;
+  mp4a.esds.slcfg_len = u16(1 << 8 | 0x80);
   mp4a.esds.slcfg_reserved = 0x02;
   return (const char *)this;
 }
@@ -377,11 +377,11 @@ inline const char *trak::Marshal(u32 id, u32 length) {
   mdia.hdlr.size = HTOBE32_SIZEOF(mdia.hdlr);
   mdia.hdlr.type = LE32TYPE("hdlr");
   if (id == 1) {
-    mdia.hdlr.handler_type = LE32TYPE("soun");
-    mdia.minf.vmhd.type = LE32TYPE("smhd"); // 音频
-  } else {
     mdia.hdlr.handler_type = LE32TYPE("vide");
     mdia.minf.vmhd.type = LE32TYPE("vmhd");
+  } else {
+    mdia.hdlr.handler_type = LE32TYPE("soun");
+    mdia.minf.vmhd.type = LE32TYPE("smhd"); // 音频
   }
   ::strcpy((char *)mdia.hdlr.name, "dontls");
   mdia.minf.vmhd.size = HTOBE32_SIZEOF(mdia.minf.vmhd);
@@ -454,9 +454,7 @@ inline void *moov::Marshal(u32 len1, u32 len2) {
   mvhd.playrate = HTOBE32(0x00010000);
   mvhd.volume = u16(HTOBE32(1));
   Matrix(mvhd.matrix);
-  if (len2 > 0) {
-    mvhd.next_trackid = HTOBE32(2);
-  }
+  mvhd.next_trackid = len2 > 0 ? HTOBE32(3) : HTOBE32(2);
   return this;
 }
 
@@ -593,50 +591,41 @@ private:
     box::stsz stsz;
     box::stco stco;
   } stbl;
-  int64_t firts_;
-  int64_t lsts_;
   int count_;
   std::vector<u32> value[4];
-  std::string str;
   std::string stsdv_;
 
 public:
-  Trak() : id_(0), trak_{}, stbl{}, firts_(0), lsts_(0), count_(0) {}
+  Trak() : id_(0), trak_{}, stbl{}, count_(0), stsdv_{} {}
   ~Trak() {}
   void AppendSample(int64_t ts, u32 &offset, u32 length);
   u32 MakeVideo(nalu::Vector &nalus);
   u32 MakeAudio(char *accspec);
-  int Marshal();
-  u32 Duration() { return HTOBE32(u32(lsts_ - firts_)); }
-  const char *Value() { return str.c_str(); }
+  int Marshal(u32 beDur);
+  const char *Value() { return stsdv_.c_str(); }
 };
 
-inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length) {
-  if (firts_ == 0) {
-    firts_ = lsts_ = ts;
+inline void Trak::AppendSample(int64_t dur, u32 &offset, u32 length) {
+  if (dur < 0) {
+    dur = 0;
   }
-  value[0].emplace_back(HTOBE32(u32(ts - lsts_))); // stts
-  if (id_ == 0) {
+  value[0].emplace_back(HTOBE32(u32(dur))); // stts
+  if (id_ == 1) {
     value[1].emplace_back(HTOBE32(1)); // stss
   }
   value[2].emplace_back(HTOBE32(length)); // stsz
   value[3].emplace_back(HTOBE32(offset)); // stco
-  lsts_ = ts;
   count_++;
   offset += length;
 }
 
-inline int Trak::Marshal() {
-  u32 dur = HTOBE32(u32(lsts_ - firts_));
-  trak_.tkhd.duration = dur;
-  trak_.mdia.mdhd.duration = dur;
+inline int Trak::Marshal(u32 beDur) {
+  trak_.tkhd.duration = beDur;
+  trak_.mdia.mdhd.duration = beDur;
   int samplesize = sizeof(u32) * count_;
-  u32 size = u32(sizeof(stbl) + stsdv_.length() + samplesize * 4);
-  str = std::string(trak_.Marshal(id_, size), sizeof(box::trak));
-  str.append(stsdv_);
-  str.append(stbl.stts.Marshal(count_), sizeof(box::stts));
+  std::string str(stbl.stts.Marshal(count_), sizeof(box::stts));
   str.append((char *)value[0].data(), samplesize);
-  if (id_ == 0) {
+  if (id_ == 1) {
     str.append(stbl.stss.Marshal(count_), sizeof(box::stss));
     str.append((char *)value[1].data(), samplesize);
   }
@@ -645,48 +634,89 @@ inline int Trak::Marshal() {
   str.append((char *)value[2].data(), samplesize);
   str.append(stbl.stco.Marshal(count_), sizeof(box::stco));
   str.append((char *)value[3].data(), samplesize);
+  u32 size = u32(stsdv_.length() + str.length());
+  stsdv_ = std::string(trak_.Marshal(id_, size), sizeof(box::trak)) + stsdv_;
+  stsdv_.append(str);
   return size + sizeof(box::trak);
 }
 
+static nalu::Vector naluSort(nalu::Vector &nalus) {
+  nalu::Vector res(2);
+  nalu::Value *vps = nullptr;
+  bool b264 = nalu::IsH264(nalus[0].type);
+  for (auto &v : nalus) {
+    if (b264) {
+      switch (v.type & 0X1F) {
+      case avc::NALU_TYPE_SPS:
+        res[0] = v;
+        /* code */
+        break;
+      case avc::NALU_TYPE_PPS:
+        res[1] = v;
+        break;
+      }
+    } else {
+      switch ((v.type & 0x7E) >> 1) {
+      case hevc::NALU_TYPE_SPS:
+        res[0] = v;
+        /* code */
+        break;
+      case hevc::NALU_TYPE_PPS:
+        res[1] = v;
+        break;
+      case hevc::NALU_TYPE_VPS:
+        vps = &v;
+        break;
+      }
+    }
+  }
+  if (vps != nullptr) {
+    res.push_back(*vps);
+  }
+  return res;
+}
+
 inline u32 Trak::MakeVideo(nalu::Vector &nalus) {
-  id_ = 0;
+  id_ = 1;
   int fps = 0, n = 0;
   char buf[256] = {0};
-  nalu::Value &sps = nalus[0];
   box::stsdv stsd{0};
-  if (nalu::IsH264(sps.type)) {
+  auto sss = naluSort(nalus);
+  nalu::Value &sps = sss[0];
+  if (sss.size() == 2) {
     stsd.avc1.type = LE32TYPE("avc1");
     avc::decode_sps((BYTE *)sps.data, sps.size, trak_.tkhd.width,
                     trak_.tkhd.height, fps);
-    n = AvccMarshal(buf, sps, nalus[1]);
+    n = AvccMarshal(buf, sps, sss[1]);
   } else {
     stsd.avc1.type = LE32TYPE("hvc1");
     hevc::decode_sps((BYTE *)sps.data, sps.size, trak_.tkhd.width,
                      trak_.tkhd.height, fps);
-    n = HvccMarshal(buf, sps, nalus[1], nalus[2]);
+    n = HvccMarshal(buf, sps, sss[1], sss[2]);
   }
   stsd.avc1.width = trak_.tkhd.width;
   stsd.avc1.height = trak_.tkhd.height;
   stsdv_ = std::string(stsd.Marshal(n), sizeof(box::stsdv));
   stsdv_.append(buf, n);
-
   return stsd.avc1.type;
 }
 
 inline u32 Trak::MakeAudio(char *accspec) {
-  id_ = 1;
-  box::stsda stsd;
-  // unsigned char data[] = {
-  //     0x00, 0x00, 0x00, 0x60, 0x73, 0x74, 0x73, 0x64, 0x00, 0x00, 0x00,
-  //     0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6D, 0x70,
-  //     0x34, 0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
-  //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10,
-  //     0x00, 0x00, 0x00, 0x00, 0x1F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-  //     0x2C, 0x65, 0x73, 0x64, 0x73, 0x00, 0x00, 0x00, 0x00, 0x03, 0x80,
-  //     0x80, 0x80, 0x1B, 0x00, 0x02, 0x00, 0x04, 0x80, 0x80, 0x80, 0x0D,
-  //     0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3E, 0x80, 0x00, 0x00};
-  // stsdv_.append((char *)data, sizeof(data));
-  stsdv_.append(stsd.Marshal(accspec), sizeof(box::stsda));
+  id_ = 2;
+  // box::stsda stsd{};
+  // const char *data = stsd.Marshal(accspec);
+  // stsdv_.append(data, sizeof(box::stsda));
+  // //ffmpeg
+  unsigned char data[] = {
+      0x00, 0x00, 0x00, 0x60, 0x73, 0x74, 0x73, 0x64, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6D, 0x70, 0x34, 0x61,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+      0x1F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x65, 0x73, 0x64, 0x73,
+      0x00, 0x00, 0x00, 0x00, 0x03, 0x80, 0x80, 0x80, 0x1B, 0x00, 0x02, 0x00,
+      0x04, 0x80, 0x80, 0x80, 0x0D, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x3E, 0x80, 0x00, 0x00, 0x35, 0xDB, 0x06, 0x80, 0x80, 0x80, 0x01, 0x02};
+  stsdv_.append((char *)data, sizeof(data));
   return 0;
 }
 
