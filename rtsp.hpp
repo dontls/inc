@@ -306,8 +306,7 @@ inline const char *Format(int type) {
 
 class Client : libnet::TcpConn {
 private:
-  int cmd_;
-  int seq_;
+  int cmd_, seq_;
   uint8_t atype_; // audio rtp type
   url url_;
   sdp sdp_;
@@ -323,7 +322,7 @@ public:
   // 转发rtp包代理
   std::function<void(uint8_t *, int)> OnRTPAnyPacket;
   // 解析帧
-  using OnFrame = std::function<void(const char *, uint8_t, libyte::Buffer &)>;
+  using OnFrame = std::function<void(const char *, uint8_t, char *, int)>;
 
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl, OnFrame callFrame) {
@@ -366,7 +365,7 @@ public:
             }
             if (ftype > 0) {
               auto &fmt = sdp_.formats[rtp.payloadType];
-              callFrame(fmt.c_str(), ftype, dbuf_);
+              callFrame(fmt.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
               dbuf_.Reset(0);
             }
           }

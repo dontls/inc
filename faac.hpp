@@ -81,29 +81,27 @@ public:
   ~Encoder() { this->uninit(); }
 
   // 编码 返回编码后数据长度
-  int Encode(char *pcmData, int pcmLen) {
+  char *Encode(char *pcmData, int pcmLen, int &aacLen) {
+    aacLen = 0;
     if (NULL == faac_) {
-      return 0;
+      return NULL;
     }
     memcpy(pAmpData_ + nAmpOff_, pcmData, pcmLen);
     nAmpOff_ += pcmLen;
     if (nAmpOff_ < KAmpBufSize) {
-      return 0;
+      return NULL;
     }
-    int accLen = 0;
-    while (accLen < 1) {
-      accLen = faacEncEncode(faac_, (int *)pAmpData_, inputSamples_, pOutBytes_,
+    while (aacLen < 1) {
+      aacLen = faacEncEncode(faac_, (int *)pAmpData_, inputSamples_, pOutBytes_,
                              maxOutput_);
     }
     nAmpOff_ -= KAmpBufSize; // 剩余未编码AAC的PCM数据
     if (nAmpOff_ > 0) {
       ::memmove(pAmpData_, pAmpData_ + KAmpBufSize, nAmpOff_);
     }
-    return accLen;
+    return (char *)pOutBytes_;
   }
 
   char *SpecialData() { return cSpecialData_; }
-
-  char *Data() { return (char *)pOutBytes_; }
 };
 } // namespace libfaac

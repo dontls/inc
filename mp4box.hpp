@@ -51,7 +51,6 @@ struct ftyp {
   u32 compat1;
   u32 compat2;
   u32 compat3;
-  u32 compat4;
   void *Marshal();
 };
 
@@ -62,7 +61,7 @@ inline void *ftyp::Marshal() {
   version = HTOBE32(512);
   compat1 = LE32TYPE("isom");
   compat2 = LE32TYPE("iso2");
-  compat4 = LE32TYPE("mp41");
+  compat3 = LE32TYPE("mp41");
   return this;
 }
 struct stsdv {
@@ -136,19 +135,19 @@ struct stsda {
       u16 esdesc_id;    // 0x0200
       u8 esdesc_flags;  // 0x00
       u8 deccfg_tag;    // 0x04
-      u8 deccfg_len;    // 17
+      u16 deccfg_len;   // 17
       u8 deccfg_object; // 0x40 - aac, 0x6B - mp3
       u8 deccfg_stream; // 0x15
       u8 deccfg_buffer_size[3];
       u32 deccfg_max_bitrate;
       u32 deccfg_avg_bitrate;
       //++ if deccfg_object == aac
-      u8 decspec_tag; // 0x05
-      u8 decspec_len; // 2
-      u16 decspec_info;
-      //-- if deccfg_object == aac
+      // u8 decspec_tag; // 0x05
+      // u8 decspec_len; // 2
+      // u16 decspec_info;
+      // //-- if deccfg_object == aac
       u8 slcfg_tag;      // 0x06
-      u8 slcfg_len;      // 1
+      u16 slcfg_len;     // 1
       u8 slcfg_reserved; // 0x02
     } esds;
   } mp4a;
@@ -164,22 +163,22 @@ inline const char *stsda::Marshal(char *aacspec) {
   mp4a.data_refidx = u16(HTOBE32(1) >> 16);
   mp4a.channel_num = u16(HTOBE32(1) >> 16);
   mp4a.sample_size = u16(HTOBE32(16) >> 16);
-  mp4a.sample_rate = HTOBE32(u32(8000) << 16);
+  mp4a.sample_rate = HTOBE32(8000 << 16);
   mp4a.esds.size = HTOBE32_SIZEOF(mp4a.esds);
   mp4a.esds.type = LE32TYPE("esds");
   mp4a.esds.esdesc_tag = 0x03;
-  mp4a.esds.esdesc_len = ((25 << 8) | 0x80);
+  mp4a.esds.esdesc_len = u16(25 << 8 | 0x80);
   mp4a.esds.esdesc_id = 0x0200;
   mp4a.esds.esdesc_flags = 0x00;
   mp4a.esds.deccfg_tag = 0x04;
-  mp4a.esds.deccfg_len = 17;
+  mp4a.esds.deccfg_len = u16(17 << 8 | 0x80);
   mp4a.esds.deccfg_object = 0x40;
   mp4a.esds.deccfg_stream = 0x15;
-  mp4a.esds.decspec_tag = 0x05;
-  mp4a.esds.decspec_len = 2;
-  mp4a.esds.decspec_info = aacspec ? (aacspec[1] << 8) | (aacspec[0] << 0) : 0;
+  // mp4a.esds.decspec_tag = 0x05;
+  // mp4a.esds.decspec_len = 2;
+  // mp4a.esds.decspec_info = 0x0812;
   mp4a.esds.slcfg_tag = 0x06;
-  mp4a.esds.slcfg_len = 1;
+  mp4a.esds.slcfg_len = u16(1 << 8 | 0x80);
   mp4a.esds.slcfg_reserved = 0x02;
   return (const char *)this;
 }
@@ -191,13 +190,19 @@ struct stts {
   u8 version;
   u8 flags[3];
   u32 count;
-  const char *Marshal(u32 num);
+  u32 sample_counts;
+  u32 sample_deltas;
+  const char *Marshal(u32 num, u32 dur);
 };
 
-inline const char *stts::Marshal(u32 num) {
-  size = HTOBE32(sizeof(stts) + num * sizeof(u32));
+inline const char *stts::Marshal(u32 num, u32 dur) {
+  size = HTOBE32_SIZEOF(stts);
   type = LE32TYPE("stts");
-  count = HTOBE32(num / 2);
+  count = HTOBE32(1);
+  sample_counts = HTOBE32(num);
+  if (num > 0) {
+    sample_deltas = HTOBE32(dur / num);
+  }
   return (const char *)this;
 }
 
@@ -303,7 +308,7 @@ struct trak {
     struct {
       u32 size;
       u32 type;
-      u8 version;
+      u8 version; // 版本 time64
       u8 flags[3];
       u32 create_time;
       u32 modify_time;
@@ -373,17 +378,19 @@ inline const char *trak::Marshal(u32 id, u32 length) {
   mdia.mdhd.size = HTOBE32_SIZEOF(mdia.mdhd);
   mdia.mdhd.type = LE32TYPE("mdhd");
   mdia.mdhd.timescale = HTOBE32(1000);
+  mdia.mdhd.language = 0xc455; // und
   // hdlr
   mdia.hdlr.size = HTOBE32_SIZEOF(mdia.hdlr);
   mdia.hdlr.type = LE32TYPE("hdlr");
   if (id == 1) {
-    mdia.hdlr.handler_type = LE32TYPE("soun");
-    mdia.minf.vmhd.type = LE32TYPE("smhd"); // 音频
-  } else {
     mdia.hdlr.handler_type = LE32TYPE("vide");
     mdia.minf.vmhd.type = LE32TYPE("vmhd");
+    ::strcpy((char *)mdia.hdlr.name, "VideoHandler");
+  } else {
+    mdia.hdlr.handler_type = LE32TYPE("soun");
+    mdia.minf.vmhd.type = LE32TYPE("smhd"); // 音频
+    ::strcpy((char *)mdia.hdlr.name, "SoundHandler");
   }
-  ::strcpy((char *)mdia.hdlr.name, "dontls");
   mdia.minf.vmhd.size = HTOBE32_SIZEOF(mdia.minf.vmhd);
   mdia.minf.vmhd.flags[2] = 1;
 
@@ -454,9 +461,7 @@ inline void *moov::Marshal(u32 len1, u32 len2) {
   mvhd.playrate = HTOBE32(0x00010000);
   mvhd.volume = u16(HTOBE32(1));
   Matrix(mvhd.matrix);
-  if (len2 > 0) {
-    mvhd.next_trackid = HTOBE32(2);
-  }
+  mvhd.next_trackid = len2 > 0 ? HTOBE32(3) : HTOBE32(2);
   return this;
 }
 
@@ -466,6 +471,8 @@ struct mdat {
 };
 #pragma pack()
 } // namespace box
+
+#pragma pack(1)
 struct avcc {
   u32 size;
   u32 type;
@@ -481,30 +488,6 @@ struct avcc {
   u16 pps_len;
   u8 *pps;
 };
-
-inline int AvccMarshal(char *buf, nalu::Value &sps, nalu::Value &pps) {
-  // 附加avcc信息
-  avcc *avc = (avcc *)(buf);
-  avc->type = LE32TYPE("avcC");
-  avc->config_ver = 1;
-  avc->avc_profile = sps.size > 1 ? sps.data[1] : 0;
-  avc->profile_compat = sps.size > 2 ? sps.data[2] : 0;
-  avc->avc_level = sps.size > 3 ? sps.data[3] : 0;
-  avc->nalulen = 0xFF;
-  int i = offsetof(avcc, sps_num);
-  buf[i++] = char((0x7 << 5) | (1 << 0));
-  buf[i++] = (sps.size << 8) & 0xff;
-  buf[i++] = sps.size & 0xff;
-  ::memcpy(&buf[i], sps.data, sps.size);
-  i += sps.size;
-  buf[i++] = 1;
-  buf[i++] = (pps.size << 8) & 0xff;
-  buf[i++] = pps.size & 0xff;
-  ::memcpy(&buf[i], pps.data, pps.size);
-  i += pps.size;
-  avc->size = HTOBE32(i);
-  return i;
-}
 
 struct hvcc {
   u32 size;
@@ -529,9 +512,33 @@ struct hvcc {
   u8 constantFrameRate : 2;
   u8 numOfArrays;
 };
+#pragma pack()
 
-inline int HvccMarshal(char *buf, nalu::Value &sps, nalu::Value &pps,
-                       nalu::Value &vps) {
+inline int AvccMarshal(char *buf, nalu::Vector &nalus) {
+  // 附加avcc信息
+  avcc *avc = (avcc *)(buf);
+  avc->type = LE32TYPE("avcC");
+  avc->config_ver = 1;
+  avc->avc_profile = nalus[0].size > 1 ? nalus[0].data[1] : 0;
+  avc->profile_compat = nalus[0].size > 2 ? nalus[0].data[2] : 0;
+  avc->avc_level = nalus[0].size > 3 ? nalus[0].data[3] : 0;
+  avc->nalulen = 0xFF;
+  int i = offsetof(avcc, sps_num);
+  buf[i++] = char((0x7 << 5) | (1 << 0));
+  buf[i++] = (nalus[0].size << 8) & 0xff;
+  buf[i++] = nalus[0].size & 0xff;
+  ::memcpy(&buf[i], nalus[0].data, nalus[0].size);
+  i += nalus[0].size;
+  buf[i++] = 1;
+  buf[i++] = (nalus[1].size << 8) & 0xff;
+  buf[i++] = nalus[1].size & 0xff;
+  ::memcpy(&buf[i], nalus[1].data, nalus[1].size);
+  i += nalus[1].size;
+  avc->size = HTOBE32(i);
+  return i;
+}
+
+inline int HvccMarshal(char *buf, nalu::Vector &nalus) {
   hvcc *hvc = (hvcc *)(buf);
   hvc->type = LE32TYPE("hvcC");
   hvc->configurationVersion = 1;
@@ -539,45 +546,44 @@ inline int HvccMarshal(char *buf, nalu::Value &sps, nalu::Value &pps,
   // hvc->general_tier_flag    = 0;
   hvc->general_profile_idc = 1;
   hvc->general_profile_compatibility_flags = 0x60;
-  hvc->general_constraint_indicator_flags0 = 0x90;
+  hvc->general_constraint_indicator_flags0 = 0x00;
   hvc->general_constraint_indicator_flags1 = 0x00;
-  hvc->general_level_idc = 63;
-  hvc->min_spatial_segmentation_idc = 0xf0;
-  hvc->parallelismType = 0 | 0xfc;
-  hvc->chromaFormat = 1 | 0xfc;
-  hvc->bitDepthLumaMinus8 = 0 | 0xf8;
-  hvc->bitDepthChromaMinus8 = 0 | 0xf8;
-  // hvc->avgFrameRate = (u16)(htonl(mp4a.frate) >> 16);
-  hvc->avgFrameRate = 0;
+  hvc->general_level_idc = 0;
+  hvc->min_spatial_segmentation_idc = 0x00;
+  hvc->parallelismType = 0;
+  hvc->chromaFormat = 0x00;
+  hvc->bitDepthLumaMinus8 = 0x00;
+  hvc->bitDepthChromaMinus8 = 0x00;
+  // hvc->avgFrameRate = (u16)(HTOBE32(25) >> 16);
   // hvc->constantFrameRate    = 0;
-  hvc->numTemporalLayers = 1;
-  hvc->temporalIdNested = 1;
+  hvc->numTemporalLayers = 0;
+  hvc->temporalIdNested = 0;
   hvc->lengthSizeMinusOne = 3;
   hvc->numOfArrays = 3;
   int i = sizeof(hvcc);
   buf[i++] = 32;
   buf[i++] = 0x00;
   buf[i++] = 0x01;
-  buf[i++] = (vps.size >> 8) & 0xff;
-  buf[i++] = vps.size & 0xff;
-  memcpy(&buf[i], vps.data, vps.size);
-  i += vps.size;
+  buf[i++] = (nalus[2].size >> 8) & 0xff;
+  buf[i++] = nalus[2].size & 0xff;
+  memcpy(&buf[i], nalus[2].data, nalus[2].size);
+  i += nalus[2].size;
 
   buf[i++] = 33;
   buf[i++] = 0x00;
   buf[i++] = 0x01;
-  buf[i++] = (sps.size >> 8) & 0xff;
-  buf[i++] = sps.size & 0xff;
-  memcpy(&buf[i], sps.data, sps.size);
-  i += sps.size;
+  buf[i++] = (nalus[0].size >> 8) & 0xff;
+  buf[i++] = nalus[0].size & 0xff;
+  memcpy(&buf[i], nalus[0].data, nalus[0].size);
+  i += nalus[0].size;
 
   buf[i++] = 34;
   buf[i++] = 0x00;
   buf[i++] = 0x01;
-  buf[i++] = (pps.size >> 8) & 0xff;
-  buf[i++] = pps.size & 0xff;
-  memcpy(&buf[i], pps.data, pps.size);
-  i += pps.size;
+  buf[i++] = (nalus[1].size >> 8) & 0xff;
+  buf[i++] = nalus[1].size & 0xff;
+  memcpy(&buf[i], nalus[1].data, nalus[1].size);
+  i += nalus[1].size;
   hvc->size = HTOBE32(i);
   return i;
 }
@@ -588,106 +594,138 @@ private:
   box::trak trak_;
   struct {
     box::stts stts;
-    box::stss stss;
+    box::stss stss; // 关键帧序号
     box::stsc stsc;
     box::stsz stsz;
     box::stco stco;
   } stbl;
-  int64_t firts_;
-  int64_t lsts_;
-  int count_;
-  std::vector<u32> value[4];
-  std::string str;
+  int64_t firts_, lsts_;
   std::string stsdv_;
+  std::vector<u32> value[3];
 
 public:
-  Trak() : id_(0), trak_{}, stbl{}, firts_(0), lsts_(0), count_(0) {}
+  Trak() : id_(0), trak_{}, stbl{}, firts_(0), lsts_(0), stsdv_{} {}
   ~Trak() {}
-  void AppendSample(int64_t ts, u32 &offset, u32 length);
-  u32 MakeVideo(nalu::Vector &nalus);
-  u32 MakeAudio(char *accspec);
-  int Marshal();
-  u32 Duration() { return HTOBE32(u32(lsts_ - firts_)); }
-  const char *Value() { return str.c_str(); }
+  void AppendSample(int64_t ts, u32 &offset, u32 length, bool bKey);
+  int Marshal(u32 *dur);
+  Trak *MakeVideo(nalu::Vector &nalus);
+  Trak *MakeAudio(char *accspec);
+  const char *Value() { return stsdv_.c_str(); }
 };
 
-inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length) {
-  if (firts_ == 0) {
-    firts_ = lsts_ = ts;
-  }
-  value[0].emplace_back(HTOBE32(u32(ts - lsts_))); // stts
-  if (id_ == 0) {
-    value[1].emplace_back(HTOBE32(1)); // stss
-  }
-  value[2].emplace_back(HTOBE32(length)); // stsz
-  value[3].emplace_back(HTOBE32(offset)); // stco
+inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length, bool bKey) {
   lsts_ = ts;
-  count_++;
+  if (firts_ == 0) {
+    firts_ = ts;
+  }
+  value[0].emplace_back(HTOBE32(length)); // stsz
+  value[1].emplace_back(HTOBE32(offset)); // stco
+  if (bKey) {
+    value[2].emplace_back(HTOBE32(value[0].size())); // stco
+  }
   offset += length;
 }
 
-inline int Trak::Marshal() {
-  u32 dur = HTOBE32(u32(lsts_ - firts_));
-  trak_.tkhd.duration = dur;
-  trak_.mdia.mdhd.duration = dur;
-  int samplesize = sizeof(u32) * count_;
-  u32 size = u32(sizeof(stbl) + stsdv_.length() + samplesize * 4);
-  str = std::string(trak_.Marshal(id_, size), sizeof(box::trak));
-  str.append(stsdv_);
-  str.append(stbl.stts.Marshal(count_), sizeof(box::stts));
-  str.append((char *)value[0].data(), samplesize);
-  if (id_ == 0) {
-    str.append(stbl.stss.Marshal(count_), sizeof(box::stss));
-    str.append((char *)value[1].data(), samplesize);
-  }
+inline int Trak::Marshal(u32 *dur) {
+  u32 rdur = lsts_ - firts_;
+  trak_.tkhd.duration = HTOBE32(rdur);
+  trak_.mdia.mdhd.duration = HTOBE32(rdur);
+  int count = value[0].size();
+  int stlength = sizeof(u32) * count;
+  std::string str(stbl.stts.Marshal(count, rdur), sizeof(box::stts));
   str.append(stbl.stsc.Marshal(), sizeof(box::stsc));
-  str.append(stbl.stsz.Marshal(count_), sizeof(box::stsz));
-  str.append((char *)value[2].data(), samplesize);
-  str.append(stbl.stco.Marshal(count_), sizeof(box::stco));
-  str.append((char *)value[3].data(), samplesize);
+  str.append(stbl.stsz.Marshal(count), sizeof(box::stsz));
+  str.append((char *)value[0].data(), stlength);
+  str.append(stbl.stco.Marshal(count), sizeof(box::stco));
+  str.append((char *)value[1].data(), stlength);
+  if (id_ == 1) {
+    count = value[2].size();
+    str.append(stbl.stss.Marshal(value[2].size()), sizeof(box::stss));
+    str.append((char *)value[2].data(), count * sizeof(u32));
+  }
+  u32 size = u32(stsdv_.length() + str.length());
+  stsdv_ = std::string(trak_.Marshal(id_, size), sizeof(box::trak)) + stsdv_;
+  stsdv_.append(str);
+  if (dur != nullptr) {
+    *dur = HTOBE32(rdur);
+  }
   return size + sizeof(box::trak);
 }
 
-inline u32 Trak::MakeVideo(nalu::Vector &nalus) {
-  id_ = 0;
+static nalu::Vector naluSort(nalu::Vector &nalus) {
+  nalu::Vector res(2);
+  nalu::Value *vps = nullptr;
+  bool b264 = nalu::IsH264(nalus[0].type);
+  for (auto &v : nalus) {
+    if (b264) {
+      switch (v.type & 0X1F) {
+      case avc::NALU_TYPE_SPS:
+        res[0] = v;
+        break;
+      case avc::NALU_TYPE_PPS:
+        res[1] = v;
+        break;
+      }
+    } else {
+      switch ((v.type & 0x7E) >> 1) {
+      case hevc::NALU_TYPE_SPS:
+        res[0] = v;
+        break;
+      case hevc::NALU_TYPE_PPS:
+        res[1] = v;
+        break;
+      case hevc::NALU_TYPE_VPS:
+        vps = &v;
+        break;
+      }
+    }
+  }
+  if (vps != nullptr) {
+    res.push_back(*vps);
+  }
+  return res;
+}
+
+inline Trak *Trak::MakeVideo(nalu::Vector &nalus) {
+  id_ = 1;
   int fps = 0, n = 0;
   char buf[256] = {0};
-  nalu::Value &sps = nalus[0];
   box::stsdv stsd{0};
-  if (nalu::IsH264(sps.type)) {
+  auto ss = naluSort(nalus);
+  std::string sps(ss[0].data, ss[0].size);
+  if (ss.size() == 2) {
     stsd.avc1.type = LE32TYPE("avc1");
-    avc::decode_sps((BYTE *)sps.data, sps.size, trak_.tkhd.width,
-                    trak_.tkhd.height, fps);
-    n = AvccMarshal(buf, sps, nalus[1]);
+    avc::decode_sps(sps, trak_.tkhd.width, trak_.tkhd.height, fps);
+    n = AvccMarshal(buf, ss);
   } else {
     stsd.avc1.type = LE32TYPE("hvc1");
-    hevc::decode_sps((BYTE *)sps.data, sps.size, trak_.tkhd.width,
-                     trak_.tkhd.height, fps);
-    n = HvccMarshal(buf, sps, nalus[1], nalus[2]);
+    hevc::decode_sps(sps, trak_.tkhd.width, trak_.tkhd.height, fps);
+    n = HvccMarshal(buf, ss);
   }
   stsd.avc1.width = trak_.tkhd.width;
   stsd.avc1.height = trak_.tkhd.height;
   stsdv_ = std::string(stsd.Marshal(n), sizeof(box::stsdv));
   stsdv_.append(buf, n);
-
-  return stsd.avc1.type;
+  return this;
 }
 
-inline u32 Trak::MakeAudio(char *accspec) {
-  id_ = 1;
-  box::stsda stsd;
-  // unsigned char data[] = {
-  //     0x00, 0x00, 0x00, 0x60, 0x73, 0x74, 0x73, 0x64, 0x00, 0x00, 0x00,
-  //     0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6D, 0x70,
-  //     0x34, 0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
-  //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10,
-  //     0x00, 0x00, 0x00, 0x00, 0x1F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-  //     0x2C, 0x65, 0x73, 0x64, 0x73, 0x00, 0x00, 0x00, 0x00, 0x03, 0x80,
-  //     0x80, 0x80, 0x1B, 0x00, 0x02, 0x00, 0x04, 0x80, 0x80, 0x80, 0x0D,
-  //     0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3E, 0x80, 0x00, 0x00};
-  // stsdv_.append((char *)data, sizeof(data));
-  stsdv_.append(stsd.Marshal(accspec), sizeof(box::stsda));
-  return 0;
+inline Trak *Trak::MakeAudio(char *accspec) {
+  id_ = 2;
+  // box::stsda stsd{};
+  // const char *data = stsd.Marshal(accspec);
+  // stsdv_.append(data, sizeof(box::stsda));
+  // //ffmpeg
+  unsigned char data[] = {
+      0x00, 0x00, 0x00, 0x60, 0x73, 0x74, 0x73, 0x64, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6D, 0x70, 0x34, 0x61,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+      0x1F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x65, 0x73, 0x64, 0x73,
+      0x00, 0x00, 0x00, 0x00, 0x03, 0x80, 0x80, 0x80, 0x1B, 0x00, 0x02, 0x00,
+      0x04, 0x80, 0x80, 0x80, 0x0D, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x3E, 0x80, 0x00, 0x00, 0x35, 0xDB, 0x06, 0x80, 0x80, 0x80, 0x01, 0x02};
+  stsdv_.append((char *)data, sizeof(data));
+  return this;
 }
 
 } // namespace libmp4
