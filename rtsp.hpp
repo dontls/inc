@@ -307,15 +307,15 @@ inline const char *Format(int type) {
 class Client : libnet::TcpConn {
 private:
   int cmd_, seq_;
+  librtp::Packet rtp_;
   uint8_t atype_; // audio rtp type
   url url_;
   sdp sdp_;
   libyte::Buffer dbuf_;
-  std::function<uint8_t(std::string &, librtp::Packet *, libyte::Buffer &)>
-      decode_;
 
 public:
-  Client(bool reqAudio = false) : cmd_(0), seq_(0), OnRTPAnyPacket(nullptr) {
+  Client(bool reqAudio = false)
+      : cmd_(0), seq_(0), rtp_{}, OnRTPAnyPacket(nullptr) {
     atype_ = reqAudio ? 0xff : 0;
   }
   ~Client() { Close(); }
@@ -351,30 +351,27 @@ public:
           if (OnRTPAnyPacket) {
             this->OnRTPAnyPacket(b, dlen + 4);
           }
-          auto rtp = librtp::Unmarshal(b + 4, dlen);
+          auto rtp = rtp_.Unmarshal(b + 4, dlen);
           if (callFrame) {
-            uint8_t ftype = 0;
-            if (rtp.payloadType == 96 || rtp.payloadType == 98) {
-              ftype = this->decode_(sdp_.spsvalue, &rtp, dbuf_);
+            if (rtp->payloadType == 96 || rtp->payloadType == 98) {
+              uint8_t ftype = rtp->Decode(sdp_.spsvalue, dbuf_);
               if (ftype > 0) {
                 ftype = ftype == 1 ? 2 : 1;
+                auto &fmt = sdp_.formats[rtp->payloadType];
+                callFrame(fmt.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
+                dbuf_.Reset();
               }
-            } else if (rtp.payloadType == atype_) {
-              ftype = 3;
-              dbuf_.Write((char *)rtp.data, rtp.size);
-            }
-            if (ftype > 0) {
-              auto &fmt = sdp_.formats[rtp.payloadType];
-              callFrame(fmt.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
-              dbuf_.Reset(0);
+            } else if (rtp->payloadType == atype_) {
+              auto &fmt = sdp_.formats[rtp->payloadType];
+              callFrame(fmt.c_str(), 3, (char *)rtp->data, rtp->size);
             }
           }
-          LibRtspDebug("%u rtp type %d channel %d, %d\n", rtp.timestamp,
-                       rtp.payloadType, ch, dlen);
+          LibRtspDebug("rtp type %d %u marker %d, channel %d, %d\n",
+                       rtp->payloadType, rtp->timestamp, rtp->marker, ch, dlen);
           // 保活机制
           if (libtime::Since(ts) > 10000) {
             ts = libtime::UnixMilli();
-            this->doKeepalive(&rtp);
+            this->doKeepalive(rtp);
           }
           return dlen + 4;
         },
@@ -456,9 +453,6 @@ private:
                             [](sdp::media &m) {
                               return m.name.find("video") != std::string::npos;
                             });
-      this->decode_ = (m->rtpmap.find("H265") != std::string::npos)
-                          ? librtp::h265::Unmarshal
-                          : librtp::h264::Unmarshal;
       doWriteCmd(SETUP, m->id.c_str(), seq_++, sdp_.session.c_str(),
                  url_.GetAuth("SETUP").c_str());
       cmd_ = SETAUDIO;

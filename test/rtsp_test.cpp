@@ -1,14 +1,29 @@
 #include "../rtsp.hpp"
-// #include "../fmp4.hpp"
+#include "../mp4.hpp"
+#include "../faac.hpp"
 
 int main(int argc, char const *argv[]) {
-  FILE *file = fopen("12456.264", "wb+");
-  librtsp::Client cli;
-  cli.Play("rtsp://172.16.50.225:554/stander/livestream/0/0",
-           [=](const char *format, uint8_t ftype, libyte::Buffer &b) {
-             printf("%s type %d size %ld\n", format, ftype, b.Len());
-             fwrite(b.Bytes(), b.Len(), 1, file);
-           });
-  fclose(file);
+  libfile::Mp4 file("00rtsp.mp4");
+  try {
+    libfaac::Encoder faac(8000, 1, 16, libfaac::STREAM_RAW);
+    librtsp::Client cli(true);
+    auto firts = libtime::UnixMilli();
+    cli.Play("rtsp://admin:12345@172.16.50.219/test.mp4",
+             [&](const char *format, uint8_t ftype, char *data, int len) {
+               auto ts = libtime::UnixMilli();
+               printf("%s %lld type %d size %d\n", format, ts, ftype, len);
+               if (ftype == 3) {
+                 data = faac.Encode(data, len, len);
+               }
+               if (len > 0) {
+                 file.Write(ts, ftype, data, len);
+               }
+               if (ts - firts > 5000) {
+                 cli.Stop();
+               }
+             });
+  } catch (libnet::Exception) {
+  }
+  file.Close();
   return 0;
 }
