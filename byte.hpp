@@ -8,119 +8,138 @@ namespace libyte {
 
 struct Slice {
   char *data;
-  size_t length;
+  size_t pos;
+
+  Slice(char *s) : data(s), pos(0) {}
+  Slice(char *s, size_t off) : data(s), pos(off) {}
+  
+  u8 *AppendU8(u8 n) {
+    u8 *dest = (u8 *)(data + pos);
+    dest[0] = n;
+    pos += 1;
+    return dest + 1;
+  }
+
+  u8 *AppendLeU16(u16 n) {
+    u8 *dest = (u8 *)(data + pos);
+    dest[0] = n & 0xff;
+    dest[1] = (n >> 8) & 0xff;
+    pos += 2;
+    return dest + 2;
+  }
+
+  u8 *AppendBeU16(u16 n) {
+    u8 *dest = (u8 *)(data + pos);
+    dest[0] = (n >> 8) & 0xff;
+    dest[1] = n & 0xff;
+    pos += 2;
+    return dest + 2;
+  }
+
+  u8 *AppendLeU32(u32 n) {
+    u8 *dest = (u8 *)(data + pos);
+    dest[0] = n & 0xff;
+    dest[1] = (n >> 8) & 0xff;
+    dest[2] = (n >> 16) & 0xff;
+    dest[3] = (n >> 24) & 0xff;
+    pos += 4;
+    return dest + 4;
+  }
+
+  u8 *AppendBeU32(u32 n) {
+    u8 *dest = (u8 *)(data + pos);
+    dest[0] = (n >> 24) & 0xff;
+    dest[1] = (n >> 16) & 0xff;
+    dest[2] = (n >> 8) & 0xff;
+    dest[3] = n & 0xff;
+    pos += 4;
+    return dest + 4;
+  }
+
+  u8 *AppendLeU64(u64 n) {
+    u8 *dest = (u8 *)(data + pos);
+    dest[0] = n & 0xff;
+    dest[1] = (n >> 8) & 0xff;
+    dest[2] = (n >> 16) & 0xff;
+    dest[3] = (n >> 24) & 0xff;
+    dest[4] = (n >> 32) & 0xff;
+    dest[5] = (n >> 40) & 0xff;
+    dest[6] = (n >> 48) & 0xff;
+    dest[7] = (n >> 56) & 0xff;
+    pos += 8;
+    return dest + 8;
+  }
+
+  u8 *AppendBeU64(u64 n) {
+    u8 *dest = (u8 *)(data + pos);
+    dest[0] = (n >> 56) & 0xff;
+    dest[1] = (n >> 48) & 0xff;
+    dest[2] = (n >> 40) & 0xff;
+    dest[3] = (n >> 32) & 0xff;
+    dest[4] = (n >> 24) & 0xff;
+    dest[5] = (n >> 16) & 0xff;
+    dest[6] = (n >> 8) & 0xff;
+    dest[7] = n & 0xff;
+    pos += 8;
+    return dest + 8;
+  }
+
+  u8 U8() {
+    u8 r = data[pos++];
+    return r;
+  }
+
+  u16 LeU16() {
+    u16 r = data[pos++];
+    r |= u16(data[pos++]) << 8;
+    return r;
+  }
+
+  u32 LeU32() {
+    u32 r = data[pos++];
+    r |= u32(data[pos++]) << 8;
+    r |= u32(data[pos++]) << 16;
+    r |= u32(data[pos++]) << 24;
+    return r;
+  }
+  u64 LeU64() {
+    u64 r = data[pos++];
+    r |= u64(data[pos++]) << 8;
+    r |= u64(data[pos++]) << 16;
+    r |= u64(data[pos++]) << 24;
+    r |= u64(data[pos++]) << 32;
+    r |= u64(data[pos++]) << 40;
+    r |= u64(data[pos++]) << 48;
+    r |= u64(data[pos++]) << 56;
+    return r;
+  }
+
+  u16 BeU16() {
+    u16 r = u16(data[pos++]) << 8;
+    r |= u16(data[pos++]);
+    return r;
+  }
+
+  u32 BeU32() {
+    u32 r = u32(data[pos++]) << 24;
+    r |= u32(data[pos++]) << 16;
+    r |= u32(data[pos++]) << 8;
+    r |= u32(data[pos++]);
+    return r;
+  }
+
+  u64 BeU64() {
+    u64 r = u64(data[pos++]) << 56;
+    r |= u64(data[pos++]) << 48;
+    r |= u64(data[pos++]) << 40;
+    r |= u64(data[pos++]) << 32;
+    r |= u64(data[pos++]) << 24;
+    r |= u64(data[pos++]) << 16;
+    r |= u64(data[pos++]) << 8;
+    r |= u64(data[pos++]);
+    return r;
+  }
 };
-
-inline u8 *AppendU8(u8 *dest, u8 n) {
-  dest[0] = n;
-  return dest + 1;
-}
-
-inline u8 *AppendLeU16(u8 *dest, u16 n) {
-  dest[0] = n & 0xff;
-  dest[1] = (n >> 8) & 0xff;
-  return dest + 2;
-}
-
-inline u8 *AppendLeU32(u8 *dest, u32 n) {
-  dest[0] = n & 0xff;
-  dest[1] = (n >> 8) & 0xff;
-  dest[2] = (n >> 16) & 0xff;
-  dest[3] = (n >> 24) & 0xff;
-  return dest + 4;
-}
-
-inline u8 *AppendLeU64(u8 *dest, u64 n) {
-  dest[0] = n & 0xff;
-  dest[1] = (n >> 8) & 0xff;
-  dest[2] = (n >> 16) & 0xff;
-  dest[3] = (n >> 24) & 0xff;
-  dest[4] = (n >> 32) & 0xff;
-  dest[5] = (n >> 40) & 0xff;
-  dest[6] = (n >> 48) & 0xff;
-  dest[7] = (n >> 56) & 0xff;
-  return dest + 4;
-}
-
-inline u8 *AppendBeU16(u8 *dest, u16 n) {
-  dest[0] = (n >> 8) & 0xff;
-  dest[1] = n & 0xff;
-  return dest + 2;
-}
-
-inline u8 *AppendBeU32(u8 *dest, u32 n) {
-  dest[0] = (n >> 24) & 0xff;
-  dest[1] = (n >> 16) & 0xff;
-  dest[2] = (n >> 8) & 0xff;
-  dest[3] = n & 0xff;
-  return dest + 4;
-}
-
-inline u8 *AppendBeU64(u8 *dest, u64 n) {
-  dest[0] = (n >> 56) & 0xff;
-  dest[1] = (n >> 48) & 0xff;
-  dest[2] = (n >> 40) & 0xff;
-  dest[3] = (n >> 32) & 0xff;
-  dest[4] = (n >> 24) & 0xff;
-  dest[5] = (n >> 16) & 0xff;
-  dest[6] = (n >> 8) & 0xff;
-  dest[7] = n & 0xff;
-  return dest + 8;
-}
-
-inline u8 U8(u8 *b, i32 &i) {
-  u8 r = b[i++];
-  return r;
-}
-inline u16 LeU16(u8 *b, i32 &i) {
-  u16 r = b[i++];
-  r |= u16(b[i++]) << 8;
-  return r;
-}
-inline u32 LeU32(u8 *b, i32 &i) {
-  u32 r = b[i++];
-  r |= u32(b[i++]) << 8;
-  r |= u32(b[i++]) << 16;
-  r |= u32(b[i++]) << 24;
-  return r;
-}
-inline u64 LeU64(u8 *b, i32 &i) {
-  u64 r = b[i++];
-  r |= u64(b[i++]) << 8;
-  r |= u64(b[i++]) << 16;
-  r |= u64(b[i++]) << 24;
-  r |= u64(b[i++]) << 32;
-  r |= u64(b[i++]) << 40;
-  r |= u64(b[i++]) << 48;
-  r |= u64(b[i++]) << 56;
-  return r;
-}
-
-inline u16 BeU16(u8 *b, i32 &i) {
-  u16 r = u16(b[i++]) << 8;
-  r |= u16(b[i++]);
-  return r;
-}
-
-inline u32 BeU32(u8 *b, i32 &i) {
-  u32 r = u32(b[i++]) << 24;
-  r |= u32(b[i++]) << 16;
-  r |= u32(b[i++]) << 8;
-  r |= u32(b[i++]);
-  return r;
-}
-
-inline u64 BeU64(u8 *b, i32 &i) {
-  u64 r = u64(b[i++]) << 56;
-  r |= u64(b[i++]) << 48;
-  r |= u64(b[i++]) << 40;
-  r |= u64(b[i++]) << 32;
-  r |= u64(b[i++]) << 24;
-  r |= u64(b[i++]) << 16;
-  r |= u64(b[i++]) << 8;
-  r |= u64(b[i++]);
-  return r;
-}
 
 } // namespace libyte
 
