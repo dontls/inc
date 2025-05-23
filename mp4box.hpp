@@ -514,7 +514,7 @@ struct hvcc {
 };
 #pragma pack()
 
-inline int AvccMarshal(char *buf, nalu::Vector &nalus) {
+inline int AvccMarshal(char *buf, nalu::Units &nalus) {
   // 附加avcc信息
   avcc *avc = (avcc *)(buf);
   avc->type = LE32TYPE("avcC");
@@ -538,7 +538,7 @@ inline int AvccMarshal(char *buf, nalu::Vector &nalus) {
   return i;
 }
 
-inline int HvccMarshal(char *buf, nalu::Vector &nalus) {
+inline int HvccMarshal(char *buf, nalu::Units &nalus) {
   hvcc *hvc = (hvcc *)(buf);
   hvc->type = LE32TYPE("hvcC");
   hvc->configurationVersion = 1;
@@ -608,7 +608,7 @@ public:
   ~Trak() {}
   void AppendSample(int64_t ts, u32 &offset, u32 length, bool bKey);
   int Marshal(u32 *dur);
-  Trak *MakeVideo(nalu::Vector &nalus);
+  Trak *MakeVideo(nalu::Units &nalus);
   Trak *MakeAudio(char *accspec);
   const char *Value() { return stsdv_.c_str(); }
 };
@@ -652,55 +652,21 @@ inline int Trak::Marshal(u32 *dur) {
   return size + sizeof(box::trak);
 }
 
-static nalu::Vector naluSort(nalu::Vector &nalus) {
-  nalu::Vector res(2);
-  nalu::Value *vps = nullptr;
-  bool b264 = nalu::IsH264(nalus[0].type);
-  for (auto &v : nalus) {
-    if (b264) {
-      switch (v.type & 0X1F) {
-      case avc::NALU_TYPE_SPS:
-        res[0] = v;
-        break;
-      case avc::NALU_TYPE_PPS:
-        res[1] = v;
-        break;
-      }
-    } else {
-      switch ((v.type & 0x7E) >> 1) {
-      case hevc::NALU_TYPE_SPS:
-        res[0] = v;
-        break;
-      case hevc::NALU_TYPE_PPS:
-        res[1] = v;
-        break;
-      case hevc::NALU_TYPE_VPS:
-        vps = &v;
-        break;
-      }
-    }
-  }
-  if (vps != nullptr) {
-    res.push_back(*vps);
-  }
-  return res;
-}
-
-inline Trak *Trak::MakeVideo(nalu::Vector &nalus) {
+inline Trak *Trak::MakeVideo(nalu::Units &nalus) {
   id_ = 1;
   int fps = 0, n = 0;
   char buf[256] = {0};
   box::stsdv stsd{0};
-  auto ss = naluSort(nalus);
-  std::string sps(ss[0].data, ss[0].size);
-  if (ss.size() == 2) {
+  auto units = nalu::Sort(nalus);
+  std::string sps(units[0].data, units[0].size);
+  if (units.size() == 2) {
     stsd.avc1.type = LE32TYPE("avc1");
     avc::decode_sps(sps, trak_.tkhd.width, trak_.tkhd.height, fps);
-    n = AvccMarshal(buf, ss);
+    n = AvccMarshal(buf, units);
   } else {
     stsd.avc1.type = LE32TYPE("hvc1");
     hevc::decode_sps(sps, trak_.tkhd.width, trak_.tkhd.height, fps);
-    n = HvccMarshal(buf, ss);
+    n = HvccMarshal(buf, units);
   }
   stsd.avc1.width = trak_.tkhd.width;
   stsd.avc1.height = trak_.tkhd.height;

@@ -322,7 +322,7 @@ public:
   // 转发rtp包代理
   std::function<void(uint8_t *, int)> OnRTPAnyPacket;
   // 解析帧
-  using OnFrame = std::function<void(const char *, uint8_t, char *, int)>;
+  using OnFrame = std::function<void(const char *, uint8_t, char *, size_t)>;
 
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl, OnFrame callFrame) {

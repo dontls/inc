@@ -131,15 +131,15 @@ public:
     return file_ != NULL;
   }
   void Close();
-  int Write(int64_t ts, uint8_t ftype, char *data, int len);
+  int Write(int64_t ts, uint8_t ftype, char *data, size_t len);
 
 private:
-  size_t WriteBoxFtypMoov(nalu::Vector &nalus) {
+  size_t WriteBoxFtypMoov(nalu::Units &nalus) {
     libmp4::box::ftyp ftyp = {0};
     libmp4::box::moov moov = {0};
     box::mvex mvex = {0};
     libmp4::Trak trakv, traka;
-    ftyp.compat3 = trakv.MakeVideo(nalus);
+    trakv.MakeVideo(nalus);
     traka.MakeAudio(nullptr);
     int vlen = trakv.Marshal(0);
     int alen = traka.Marshal(0);
@@ -166,11 +166,11 @@ inline void FMp4::Close() {
 }
 
 // video
-inline int FMp4::Write(int64_t ts, uint8_t ftype, char *data, int len) {
+inline int FMp4::Write(int64_t ts, uint8_t ftype, char *data, size_t len) {
   if (file_ == nullptr) {
     return -1;
   }
-  nalu::Vector nalus;
+  nalu::Units nalus;
   char *ptr = nalu::Split(data, len, nalus);
   if (firts_ == 0 && ftype == 1) {
     this->WriteBoxFtypMoov(nalus);

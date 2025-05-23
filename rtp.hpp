@@ -125,41 +125,6 @@ public:
   }
 };
 
-// static void Marshal(char *data, size_t len,
-//                     std::function<void(Packet *)> callrtp) {
-//   nalu::Vector nalus;
-//   char *ptr = nalu::Split(data, len, nalus);
-//   Packet };
-//   for (auto it : nalus) {
-//     marker = 1;
-//     data = (uint8_t *)it.data;
-//     size = it.size;
-//     callrtp(&;
-//   }
-//   uint8_t payload[RTP_MAX_SIZE + 4] = {};
-//   data = payload;
-//   payload[0] = (ptr[0] & 0x60) | 28;
-//   int rsize = len, i = 0;
-//   while (rsize > RTP_MAX_SIZE) {
-//     marker = 0;
-//     payload[1] = ptr[0] & 0x1F;
-//     if (i == 0) {
-//       payload[1] |= 0x80;
-//     }
-//     memcpy((char *)&payload[2], ptr + i, RTP_MAX_SIZE);
-//     size = RTP_MAX_SIZE + 2;
-//     i += RTP_MAX_SIZE;
-//     rsize -= RTP_MAX_SIZE;
-//     callrtp(&;
-//   }
-//   marker = 1;
-//   payload[1] = ptr[0] & 0x1F;
-//   payload[1] |= 0x40; // end
-//   memcpy((char *)&payload[2], ptr + i, rsize);
-//   size = rsize + 2;
-//   callrtp(&;
-// }
-
 } // namespace librtp
 
 namespace librtcp {

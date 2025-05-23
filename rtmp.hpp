@@ -92,7 +92,7 @@ public:
     if (fts_ == 0) {
       return 0;
     }
-    nalu::Vector nalus;
+    nalu::Units nalus;
     char *data = nalu::Split(frame, len, nalus);
     if (data == nullptr) {
       return 0;

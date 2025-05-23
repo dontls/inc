@@ -1,8 +1,15 @@
 #pragma once
+
+#include <stddef.h>
 #include "types.h"
 // 实现大小端存储读
 
 namespace libyte {
+
+struct Slice {
+  char *data;
+  size_t length;
+};
 
 inline u8 *AppendU8(u8 *dest, u8 n) {
   dest[0] = n;

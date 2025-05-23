@@ -394,23 +394,23 @@ inline bool decode_sps(std::string &s, UINT &width, UINT &height, int &fps) {
 
 namespace nalu {
 
-struct Value {
+struct Unit {
   int type;
-  int size;
+  size_t size;
   char *data;
 };
 
-typedef std::vector<Value> Vector;
+typedef std::vector<Unit> Units;
 
 static const char START[] = {0x00, 0x00, 0x00, 0x01};
 
 // 返回下个nalu开始的位置，length剩余数据长度
-inline char *Split(char *data, int &length, Vector &nalus) {
+inline char *Split(char *data, size_t &length, Units &nalus) {
   if (memcmp(data, START, sizeof(START)) != 0) {
     return nullptr;
   }
   data += sizeof(START);
-  int i = 0;
+  size_t i = 0;
   while ((i + sizeof(START)) < length) {
     if (memcmp(data + i, START, sizeof(START)) == 0) {
       break;
@@ -418,7 +418,7 @@ inline char *Split(char *data, int &length, Vector &nalus) {
     i++;
   }
   if (i + sizeof(START) < length) {
-    nalus.emplace_back(Value{data[0], i, data});
+    nalus.emplace_back(Unit{data[0], i, data});
     return Split(data + i, length, nalus);
   }
   length -= sizeof(START);
@@ -426,4 +426,38 @@ inline char *Split(char *data, int &length, Vector &nalus) {
 }
 
 inline bool IsH264(char b) { return (b & 0xf0) == 0x60; }
+
+inline Units Sort(Units &nalus) {
+  Units res(2);
+  Unit *vps = nullptr;
+  bool b264 = IsH264(nalus[0].type);
+  for (auto &v : nalus) {
+    if (b264) {
+      switch (v.type & 0X1F) {
+      case avc::NALU_TYPE_SPS:
+        res[0] = v;
+        break;
+      case avc::NALU_TYPE_PPS:
+        res[1] = v;
+        break;
+      }
+    } else {
+      switch ((v.type & 0x7E) >> 1) {
+      case hevc::NALU_TYPE_SPS:
+        res[0] = v;
+        break;
+      case hevc::NALU_TYPE_PPS:
+        res[1] = v;
+        break;
+      case hevc::NALU_TYPE_VPS:
+        vps = &v;
+        break;
+      }
+    }
+  }
+  if (vps != nullptr) {
+    res.push_back(*vps);
+  }
+  return res;
+}
 } // namespace nalu

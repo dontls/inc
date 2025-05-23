@@ -21,7 +21,7 @@ private:
   unsigned char *pOutBytes_ = nullptr;
   char cSpecialData_[8] = {}; // 音频特殊信息
   char *pAmpData_ = nullptr;
-  int nAmpOff_ = 0;
+  size_t nAmpOff_ = 0;
 
 private:
   // 8000 1 16 STREAM_RAW
@@ -81,7 +81,7 @@ public:
   ~Encoder() { this->uninit(); }
 
   // 编码 返回编码后数据长度
-  char *Encode(char *pcmData, int pcmLen, int &aacLen) {
+  char *Encode(char *pcmData, size_t pcmLen, size_t &aacLen) {
     aacLen = 0;
     if (NULL == faac_) {
       return NULL;
