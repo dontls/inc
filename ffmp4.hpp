@@ -33,7 +33,9 @@ public:
 
   void Close() {
     if (pOfmtCtx_) {
-      av_write_trailer(pOfmtCtx_);
+      if (firstFrameTime_ > 0) {
+        av_write_trailer(pOfmtCtx_);
+      }
       avio_closep(&pOfmtCtx_->pb);
       avformat_free_context(pOfmtCtx_);
       pOfmtCtx_ = nullptr;
@@ -67,7 +69,7 @@ public:
     }
     int64_t dts = ts - firstFrameTime_;
     if (ldts_ > 0 && ts == ldts_) {
-      ts += 10;
+      ts += 20;
     }
     ldts_ = ts;
     AVPacket *pkt = av_packet_alloc();

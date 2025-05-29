@@ -4,10 +4,10 @@
 #include "time.hpp"
 #include "crypto/base64.h"
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <sstream>
+#include <stddef.h>
 #include <stdio.h>
 #include <string>
 #include <vector>
@@ -333,25 +333,24 @@ public:
     doWriteCmd(OPTIONS, seq_++, "");
     long long ts = libtime::UnixMilli();
     this->LoopRead(
-        [&](libyte::Buffer &buf) {
-          int blen = static_cast<int>(buf.Len()) - 4;
-          if (blen < 0) {
+        [&](char *data, int len) {
+          if (len < 4) {
             return 0;
           }
-          uint8_t *b = (uint8_t *)buf.Bytes();
+          uint8_t *b = (uint8_t *)data;
           if (b[0] != '$') {
             // GET_PARAMETER response
-            return doRtspParse((char *)b, blen + 4);
+            return doRtspParse(data, len);
           }
           uint8_t ch = b[1];
-          int dlen = Uint16(&b[2]);
-          if (blen < dlen) {
+          int dlen = Uint16(&b[2]) + 4;
+          if (len < dlen) {
             return 0;
           }
           if (OnRTPAnyPacket) {
-            this->OnRTPAnyPacket(b, dlen + 4);
+            this->OnRTPAnyPacket(b, dlen);
           }
-          auto rtp = rtp_.Unmarshal(b + 4, dlen);
+          auto rtp = rtp_.Unmarshal(b + 4, dlen - 4);
           if (callFrame) {
             if (rtp->payloadType == 96 || rtp->payloadType == 98) {
               uint8_t ftype = rtp->Decode(sdp_.spsvalue, dbuf_);
@@ -373,7 +372,7 @@ public:
             ts = libtime::UnixMilli();
             this->doKeepalive(rtp);
           }
-          return dlen + 4;
+          return dlen;
         },
         1000);
     return true;
