@@ -20,7 +20,7 @@ public:
     return file_ != NULL;
   }
   void Close();
-  int Write(int64_t ts, uint8_t ftype, char *data, size_t len);
+  int WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len);
 
 private:
   size_t WriteBoxFtyp();
@@ -57,7 +57,7 @@ inline void Mp4::Close() {
 }
 
 // ftype: 1:I, 2:p, 3:aac
-inline int Mp4::Write(int64_t ts, uint8_t ftype, char *data, size_t len) {
+inline int Mp4::WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len) {
   if (file_ == NULL) {
     return -1;
   }

@@ -135,7 +135,7 @@ struct stsda {
       u16 esdesc_id;    // 0x0200
       u8 esdesc_flags;  // 0x00
       u8 deccfg_tag;    // 0x04
-      u16 deccfg_len;   // 17
+      u8 deccfg_len;    // 17
       u8 deccfg_object; // 0x40 - aac, 0x6B - mp3
       u8 deccfg_stream; // 0x15
       u8 deccfg_buffer_size[3];
@@ -147,7 +147,7 @@ struct stsda {
       // u16 decspec_info;
       // //-- if deccfg_object == aac
       u8 slcfg_tag;      // 0x06
-      u16 slcfg_len;     // 1
+      u8 slcfg_len;      // 1
       u8 slcfg_reserved; // 0x02
     } esds;
   } mp4a;
@@ -167,18 +167,18 @@ inline const char *stsda::Marshal(char *aacspec) {
   mp4a.esds.size = HTOBE32_SIZEOF(mp4a.esds);
   mp4a.esds.type = LE32TYPE("esds");
   mp4a.esds.esdesc_tag = 0x03;
-  mp4a.esds.esdesc_len = u16(25 << 8 | 0x80);
+  mp4a.esds.esdesc_len = u16(21 << 8 | 0x80);
   mp4a.esds.esdesc_id = 0x0200;
   mp4a.esds.esdesc_flags = 0x00;
   mp4a.esds.deccfg_tag = 0x04;
-  mp4a.esds.deccfg_len = u16(17 << 8 | 0x80);
+  mp4a.esds.deccfg_len = 13;
   mp4a.esds.deccfg_object = 0x40;
   mp4a.esds.deccfg_stream = 0x15;
   // mp4a.esds.decspec_tag = 0x05;
   // mp4a.esds.decspec_len = 2;
   // mp4a.esds.decspec_info = 0x0812;
   mp4a.esds.slcfg_tag = 0x06;
-  mp4a.esds.slcfg_len = u16(1 << 8 | 0x80);
+  mp4a.esds.slcfg_len = 1;
   mp4a.esds.slcfg_reserved = 0x02;
   return (const char *)this;
 }
@@ -628,6 +628,9 @@ inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length, bool bKey) {
 
 inline int Trak::Marshal(u32 *dur) {
   u32 rdur = lsts_ - firts_;
+  if (dur != nullptr) {
+    *dur = HTOBE32(rdur);
+  }
   trak_.tkhd.duration = HTOBE32(rdur);
   trak_.mdia.mdhd.duration = HTOBE32(rdur);
   int count = value[0].size();
@@ -646,9 +649,6 @@ inline int Trak::Marshal(u32 *dur) {
   u32 size = u32(stsdv_.length() + str.length());
   stsdv_ = std::string(trak_.Marshal(id_, size), sizeof(box::trak)) + stsdv_;
   stsdv_.append(str);
-  if (dur != nullptr) {
-    *dur = HTOBE32(rdur);
-  }
   return size + sizeof(box::trak);
 }
 
@@ -689,7 +689,8 @@ inline Trak *Trak::MakeAudio(char *accspec) {
       0x1F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x65, 0x73, 0x64, 0x73,
       0x00, 0x00, 0x00, 0x00, 0x03, 0x80, 0x80, 0x80, 0x1B, 0x00, 0x02, 0x00,
       0x04, 0x80, 0x80, 0x80, 0x0D, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x3E, 0x80, 0x00, 0x00, 0x35, 0xDB, 0x06, 0x80, 0x80, 0x80, 0x01, 0x02};
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x80, 0x80, 0x80, 0x01,
+      0x02};
   stsdv_.append((char *)data, sizeof(data));
   return this;
 }

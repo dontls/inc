@@ -17,9 +17,7 @@ private:
   faacEncHandle faac_ = nullptr;
   unsigned long maxOutput_ = 0;
   unsigned long inputSamples_ = 0;
-  int nSpecialLen_ = 0;
   unsigned char *pOutBytes_ = nullptr;
-  char cSpecialData_[8] = {}; // 音频特殊信息
   char *pAmpData_ = nullptr;
   size_t nAmpOff_ = 0;
 
@@ -41,13 +39,6 @@ private:
     cfg->mpegVersion = MPEG2;
     cfg->version = MPEG2;
     faacEncSetConfiguration(faac_, cfg);
-
-    unsigned char *pBuffer = 0;
-    unsigned long ulLength = 0;
-    faacEncGetDecoderSpecificInfo(faac_, &pBuffer, &ulLength);
-
-    ::memcpy(cSpecialData_, pBuffer, ulLength);
-    nSpecialLen_ = (int)ulLength;
 
     // 音频帧的播放时间 = 一个AAC帧对应的采样样本的个数 / 采样频率(单位为s)
     // 一帧 1024个 sample。采样率 Samplerate 44100KHz，每秒44100个sample, 所以
@@ -102,6 +93,12 @@ public:
     return (char *)pOutBytes_;
   }
 
-  char *SpecialData() { return cSpecialData_; }
+  unsigned char *SpecialData(int *ulLength) {
+    unsigned char *pBuffer = NULL;
+    if (faac_) {
+      faacEncGetDecoderSpecificInfo(faac_, &pBuffer, (unsigned long *)ulLength);
+    }
+    return pBuffer;
+  }
 };
 } // namespace libfaac

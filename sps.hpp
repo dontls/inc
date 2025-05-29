@@ -396,7 +396,7 @@ namespace nalu {
 
 struct Unit {
   int type;
-  size_t size;
+  int size;
   char *data;
 };
 
@@ -418,7 +418,7 @@ inline char *Split(char *data, size_t &length, Units &nalus) {
     i++;
   }
   if (i + sizeof(START) < length) {
-    nalus.emplace_back(Unit{data[0], i, data});
+    nalus.emplace_back(Unit{data[0], int(i), data});
     return Split(data + i, length, nalus);
   }
   length -= sizeof(START);

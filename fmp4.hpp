@@ -131,7 +131,7 @@ public:
     return file_ != NULL;
   }
   void Close();
-  int Write(int64_t ts, uint8_t ftype, char *data, size_t len);
+  int WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len);
 
 private:
   size_t WriteBoxFtypMoov(nalu::Units &nalus) {
@@ -166,7 +166,7 @@ inline void FMp4::Close() {
 }
 
 // video
-inline int FMp4::Write(int64_t ts, uint8_t ftype, char *data, size_t len) {
+inline int FMp4::WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len) {
   if (file_ == nullptr) {
     return -1;
   }
