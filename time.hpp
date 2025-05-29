@@ -13,9 +13,30 @@
 #include <chrono>
 #endif
 
+#ifdef _WIN32
+#define localtime_r(info, result) localtime_s(result, info)
+#define gmtime_r(info, result) gmtime_s(result, info)
+#endif
+
 namespace libtime {
+
+static const char *DateTime = "%Y-%m-%d %H:%M:%S";
+// static const char *DateOnly = "%Y-%m-%d";
+
+// tz offset second
+inline long long TZOffset() {
+  std::time_t t0 = time(NULL);
+  struct tm timeinfo = {};
+  localtime_r(&t0, &timeinfo);
+  // 获取 UTC 时间
+  std::tm utc_tm{};
+  gmtime_r(&t0, &utc_tm);
+  return static_cast<long long>(
+      std::difftime(std::mktime(&timeinfo), std::mktime(&utc_tm)));
+}
+
 // 格式化时间
-inline std::string Format(long long t = 0) {
+inline std::string Format(long long t = 0, const char *format = DateTime) {
   if (t >= 1e15) {
     t /= 1000000;
   } else if (t >= 1e12) {
@@ -24,21 +45,17 @@ inline std::string Format(long long t = 0) {
     t = time(NULL);
   }
   std::time_t t0 = t;
-  struct tm timeinfo = {0};
-#ifdef _WIN32
-  localtime_s(&timeinfo, &t0);
-#elif __linux__
+  struct tm timeinfo = {};
   localtime_r(&t0, &timeinfo);
-#endif
   char szText[24] = {0};
-  strftime(szText, sizeof(szText), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  strftime(szText, sizeof(szText), format, &timeinfo);
   return std::string(szText);
 }
 
-inline std::time_t Format2Unix(const char *str) {
+inline std::time_t Format2Unix(const char *str, const char *format = DateTime) {
   std::tm tm = {};
   std::istringstream ss(str);
-  if (ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S")) {
+  if (ss >> std::get_time(&tm, format)) {
     return std::mktime(&tm);
   }
   return 0;
@@ -46,7 +63,7 @@ inline std::time_t Format2Unix(const char *str) {
 
 inline long long UnixMilli() {
 #ifdef __linux__
-  struct timeval tv;
+  struct timeval tv{};
   gettimeofday(&tv, 0);
   long long llRet = tv.tv_sec;
   llRet *= 1000;
