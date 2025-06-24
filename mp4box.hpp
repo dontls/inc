@@ -151,10 +151,10 @@ struct stsda {
       u8 slcfg_reserved; // 0x02
     } esds;
   } mp4a;
-  const char *Marshal(char *aacspec);
+  const char *Marshal();
 };
 
-inline const char *stsda::Marshal(char *aacspec) {
+inline const char *stsda::Marshal() {
   size = HTOBE32_SIZEOF(stsda);
   type = LE32TYPE("stsd");
   entry_count = HTOBE32(1);
@@ -176,7 +176,7 @@ inline const char *stsda::Marshal(char *aacspec) {
   mp4a.esds.deccfg_stream = 0x15;
   // mp4a.esds.decspec_tag = 0x05;
   // mp4a.esds.decspec_len = 2;
-  // mp4a.esds.decspec_info = 0x0812;
+  // mp4a.esds.decspec_info = 0x8815;
   mp4a.esds.slcfg_tag = 0x06;
   mp4a.esds.slcfg_len = 1;
   mp4a.esds.slcfg_reserved = 0x02;
@@ -377,16 +377,18 @@ inline const char *trak::Marshal(u32 id, u32 length) {
   // mdhd
   mdia.mdhd.size = HTOBE32_SIZEOF(mdia.mdhd);
   mdia.mdhd.type = LE32TYPE("mdhd");
-  mdia.mdhd.timescale = HTOBE32(1000);
+
   mdia.mdhd.language = 0xc455; // und
   // hdlr
   mdia.hdlr.size = HTOBE32_SIZEOF(mdia.hdlr);
   mdia.hdlr.type = LE32TYPE("hdlr");
   if (id == 1) {
+    mdia.mdhd.timescale = HTOBE32(1000);
     mdia.hdlr.handler_type = LE32TYPE("vide");
     mdia.minf.vmhd.type = LE32TYPE("vmhd");
     ::strcpy((char *)mdia.hdlr.name, "VideoHandler");
   } else {
+    mdia.mdhd.timescale = HTOBE32(8000);
     mdia.hdlr.handler_type = LE32TYPE("soun");
     mdia.minf.vmhd.type = LE32TYPE("smhd"); // 音频
     ::strcpy((char *)mdia.hdlr.name, "SoundHandler");
@@ -609,7 +611,7 @@ public:
   void AppendSample(int64_t ts, u32 &offset, u32 length, bool bKey);
   int Marshal(u32 *dur);
   Trak *MakeVideo(nalu::Units &nalus);
-  Trak *MakeAudio(char *accspec);
+  Trak *MakeAudio();
   const char *Value() { return stsdv_.c_str(); }
 };
 
@@ -631,6 +633,9 @@ inline int Trak::Marshal(u32 *dur) {
   if (dur != nullptr) {
     *dur = HTOBE32(rdur);
   }
+  if (id_ > 1) {
+    rdur *= 8; // 8000 timescale
+  }
   trak_.tkhd.duration = HTOBE32(rdur);
   trak_.mdia.mdhd.duration = HTOBE32(rdur);
   int count = value[0].size();
@@ -649,6 +654,7 @@ inline int Trak::Marshal(u32 *dur) {
   u32 size = u32(stsdv_.length() + str.length());
   stsdv_ = std::string(trak_.Marshal(id_, size), sizeof(box::trak)) + stsdv_;
   stsdv_.append(str);
+
   return size + sizeof(box::trak);
 }
 
@@ -658,14 +664,12 @@ inline Trak *Trak::MakeVideo(nalu::Units &nalus) {
   char buf[256] = {0};
   box::stsdv stsd{0};
   auto units = nalu::Sort(nalus);
-  std::string sps(units[0].data, units[0].size);
+  units[0].decode_sps(trak_.tkhd.width, trak_.tkhd.height, fps);
   if (units.size() == 2) {
     stsd.avc1.type = LE32TYPE("avc1");
-    avc::decode_sps(sps, trak_.tkhd.width, trak_.tkhd.height, fps);
     n = AvccMarshal(buf, units);
   } else {
     stsd.avc1.type = LE32TYPE("hvc1");
-    hevc::decode_sps(sps, trak_.tkhd.width, trak_.tkhd.height, fps);
     n = HvccMarshal(buf, units);
   }
   stsd.avc1.width = trak_.tkhd.width;
@@ -675,23 +679,23 @@ inline Trak *Trak::MakeVideo(nalu::Units &nalus) {
   return this;
 }
 
-inline Trak *Trak::MakeAudio(char *accspec) {
+inline Trak *Trak::MakeAudio() {
   id_ = 2;
-  // box::stsda stsd{};
-  // const char *data = stsd.Marshal(accspec);
-  // stsdv_.append(data, sizeof(box::stsda));
+  box::stsda stsd{};
+  const char *data = stsd.Marshal();
+  stsdv_.append(data, sizeof(box::stsda));
   // //ffmpeg
-  unsigned char data[] = {
-      0x00, 0x00, 0x00, 0x60, 0x73, 0x74, 0x73, 0x64, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6D, 0x70, 0x34, 0x61,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
-      0x1F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x65, 0x73, 0x64, 0x73,
-      0x00, 0x00, 0x00, 0x00, 0x03, 0x80, 0x80, 0x80, 0x1B, 0x00, 0x02, 0x00,
-      0x04, 0x80, 0x80, 0x80, 0x0D, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x80, 0x80, 0x80, 0x01,
-      0x02};
-  stsdv_.append((char *)data, sizeof(data));
+  // unsigned char data[] = {
+  //     0x00, 0x00, 0x00, 0x60, 0x73, 0x74, 0x73, 0x64, 0x00, 0x00, 0x00, 0x00,
+  //     0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x6D, 0x70, 0x34, 0x61,
+  //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+  //     0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+  //     0x1F, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x65, 0x73, 0x64, 0x73,
+  //     0x00, 0x00, 0x00, 0x00, 0x03, 0x80, 0x80, 0x80, 0x1B, 0x00, 0x02, 0x00,
+  //     0x04, 0x80, 0x80, 0x80, 0x0D, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00,
+  //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x80, 0x80, 0x80, 0x01,
+  //     0x02};
+  // stsdv_.append((char *)data, sizeof(data));
   return this;
 }
 

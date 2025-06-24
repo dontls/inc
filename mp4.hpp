@@ -38,7 +38,7 @@ inline size_t Mp4::WriteBoxFtyp() {
 inline size_t Mp4::WriteBoxMoov() {
   libmp4::box::moov moov = {0};
   int len = trakv_.Marshal(&moov.mvhd.duration);
-  int len1 = traka_.MakeAudio(nullptr)->Marshal(nullptr);
+  int len1 = traka_.MakeAudio()->Marshal(nullptr);
   fwrite(moov.Marshal(len, len1), sizeof(libmp4::box::moov), 1, file_);
   fwrite(trakv_.Value(), len, 1, file_);
   fwrite(traka_.Value(), len1, 1, file_);

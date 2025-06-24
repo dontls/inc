@@ -20,8 +20,8 @@ public:
   int length() const { return length_; }
 
 private:
-  char buf_[32];
-  int length_;
+  char buf_[32] = {};
+  int length_ = 0;
 };
 
 template <typename T> Fmt::Fmt(const char *fmt, T v) {
@@ -41,12 +41,14 @@ template Fmt::Fmt(const char *fmt, unsigned long long);
 template Fmt::Fmt(const char *fmt, float);
 template Fmt::Fmt(const char *fmt, double);
 
-inline std::vector<std::string> Split(const std::string &s, const char *sep) {
-  std::vector<std::string> v;
+typedef std::vector<std::string> Strings;
+
+inline Strings Split(const std::string &s, const char *p) {
+  Strings v;
   size_t pos = 0, end = 0;
-  while ((end = s.find(sep, pos)) != std::string::npos) {
+  while ((end = s.find(p, pos)) != std::string::npos) {
     v.push_back(s.substr(pos, end - pos));
-    pos = end + strlen(sep);
+    pos = end + strlen(p);
   }
   v.push_back(s.substr(pos));
   return v;

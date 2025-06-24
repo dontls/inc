@@ -23,7 +23,7 @@ private:
 
 private:
   // 8000 1 16 STREAM_RAW
-  bool init(int nSample, int nChn, int nBits, int nOfmt) {
+  void init(int nSample, int nChn, int nBits, int nOfmt) {
     faac_ = faacEncOpen(nSample, nChn, &inputSamples_, &maxOutput_);
     // 计算最大输入字节
     faacEncConfigurationPtr cfg = faacEncGetCurrentConfiguration(faac_);
@@ -47,7 +47,6 @@ private:
     // duration = 1024 * 1000 / nSample;
     pOutBytes_ = new unsigned char[maxOutput_];
     // inputSamples_ = KAmpBufSize / (nBits / 8);
-    return true;
   }
 
   void uninit() {

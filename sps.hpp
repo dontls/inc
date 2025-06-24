@@ -394,11 +394,23 @@ inline bool decode_sps(std::string &s, UINT &width, UINT &height, int &fps) {
 
 namespace nalu {
 
+inline bool IsH264(char b) { return (b & 0xf0) == 0x60; }
+
 struct Unit {
-  int type;
+  char type;
   int size;
   char *data;
+
+  bool decode_sps(UINT &width, UINT &height, int &fps);
 };
+
+inline bool Unit::decode_sps(UINT &width, UINT &height, int &fps) {
+  std::string sps(data, size);
+  if (IsH264(type)) {
+    return avc::decode_sps(sps, width, height, fps);
+  }
+  return hevc::decode_sps(sps, width, height, fps);
+}
 
 typedef std::vector<Unit> Units;
 
@@ -424,8 +436,6 @@ inline char *Split(char *data, size_t &length, Units &nalus) {
   length -= sizeof(START);
   return data;
 }
-
-inline bool IsH264(char b) { return (b & 0xf0) == 0x60; }
 
 inline Units Sort(Units &nalus) {
   Units res(2);
@@ -460,4 +470,5 @@ inline Units Sort(Units &nalus) {
   }
   return res;
 }
+
 } // namespace nalu

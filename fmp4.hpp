@@ -170,12 +170,14 @@ inline int FMp4::WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len) {
   if (file_ == nullptr) {
     return -1;
   }
-  nalu::Units nalus;
-  char *ptr = nalu::Split(data, len, nalus);
-  if (firts_ == 0 && ftype == 1) {
-    this->WriteBoxFtypMoov(nalus);
-    moof_.Marshal();
-    firts_ = lsts_ = ts;
+  if (ftype < 3) {
+    nalu::Units nalus;
+    data = nalu::Split(data, len, nalus);
+    if (firts_ == 0 && ftype == 1) {
+      this->WriteBoxFtypMoov(nalus);
+      moof_.Marshal();
+      firts_ = lsts_ = ts;
+    }
   }
   if (firts_ == 0) {
     return 0;
@@ -199,6 +201,6 @@ inline int FMp4::WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len) {
   // 写入mdat
   u32 slen = libmp4::HTOBE32(len);
   fwrite(&slen, sizeof(u32), 1, file_);
-  return int(fwrite(ptr, len, 1, file_));
+  return int(fwrite(data, len, 1, file_));
 }
 } // namespace libfile

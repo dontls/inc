@@ -84,35 +84,30 @@ public:
     return nRet;
   }
 
-  // type:1 代表i帧
-  int WriteVideo(char *frame, size_t len, int type, long long ts) {
-    if (fts_ == 0 && type == 1) {
+  // ftype:1 代表i帧
+  int WriteFrame(char *frame, size_t len, int ftype, long long ts) {
+    if (fts_ == 0) {
+      if (ftype != 1) {
+        return 0;
+      }
       fts_ = ts;
     }
-    if (fts_ == 0) {
-      return 0;
+    long long dts = ts - fts_;
+    if (ftype == 3) {
+      libyte::Buffer *b = pkt_.Marshal(frame, len);
+      return WritePacket(RTMP_PACKET_TYPE_AUDIO, b, dts);
     }
     nalu::Units nalus;
     char *data = nalu::Split(frame, len, nalus);
     if (data == nullptr) {
       return 0;
     }
-    long long dts = ts - fts_;
-    if (type == 1) {
+    if (ftype == 1) {
       libyte::Buffer *b = pkt_.Marshal(nalus);
       WritePacket(RTMP_PACKET_TYPE_VIDEO, b, dts);
     }
-    libyte::Buffer *b = pkt_.Marshal(data, len, type == 1);
+    libyte::Buffer *b = pkt_.Marshal(data, len, ftype == 1);
     return WritePacket(RTMP_PACKET_TYPE_VIDEO, b, dts);
-  }
-
-  int WriteAAC(char *data, size_t len, long long ts) {
-    if (fts_ == 0) {
-      return 0;
-    }
-    long long dts = ts - fts_;
-    libyte::Buffer *b = pkt_.Marshal(data, len);
-    return WritePacket(RTMP_PACKET_TYPE_AUDIO, b, dts);
   }
 };
 

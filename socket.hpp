@@ -611,7 +611,7 @@ protected:
                                    // about the remote connection
 
 private:
-  int setDealTimeout(long timeout, bool isread) {
+  int setDealTimeout(long timeout, bool bRead) {
     int err = -1;
     struct timeval tout;
     tout.tv_sec = timeout / 1000;
@@ -622,7 +622,7 @@ private:
 #endif // __linux__
     fd_set fd{};
     fd_set *fdr = NULL, *fdw = NULL;
-    isread ? fdr = &fd : fdw = &fd;
+    bRead ? fdr = &fd : fdw = &fd;
     while (1) {
       FD_ZERO(&fd);
       FD_SET(m_sock, &fd);
