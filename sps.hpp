@@ -422,18 +422,19 @@ inline char *Split(char *data, size_t &length, Units &nalus) {
     return nullptr;
   }
   data += sizeof(START);
+  length -= sizeof(START);
   size_t i = 0;
-  while ((i + sizeof(START)) < length) {
+  while (i < length) {
     if (memcmp(data + i, START, sizeof(START)) == 0) {
       break;
     }
     i++;
   }
-  if (i + sizeof(START) < length) {
+  if (i < length) {
     nalus.emplace_back(Unit{data[0], int(i), data});
+    length -= i;
     return Split(data + i, length, nalus);
   }
-  length -= sizeof(START);
   return data;
 }
 

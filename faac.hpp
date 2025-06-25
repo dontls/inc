@@ -29,8 +29,8 @@ private:
     faacEncConfigurationPtr cfg = faacEncGetCurrentConfiguration(faac_);
     cfg->inputFormat = FAAC_INPUT_16BIT;
     cfg->outputFormat = nOfmt; // 0:RAW——STREAM	1:ADTS-STREAM
-    cfg->useTns = true;
-    cfg->useLfe = false;
+    cfg->useTns = 1;
+    cfg->useLfe = 0;
     cfg->aacObjectType = LOW;
     cfg->shortctl = SHORTCTL_NORMAL;
     cfg->quantqual = 100;

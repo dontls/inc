@@ -23,19 +23,19 @@ public:
   int WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len);
 
 private:
-  size_t WriteBoxFtyp();
-  size_t WriteBoxMoov();
+  size_t WriteFtyp();
+  size_t WriteMoov();
 };
 
-inline size_t Mp4::WriteBoxFtyp() {
-  libmp4::box::ftyp ftyp;
+inline size_t Mp4::WriteFtyp() {
+  libmp4::box::ftyp ftyp{};
   mdat_.type = libmp4::LE32TYPE("mdat");
-  mdat_.size = sizeof(libmp4::box::ftyp) + sizeof(libmp4::box::mdat);
+  mdat_.size = sizeof(ftyp) + sizeof(mdat_);
   fwrite(ftyp.Marshal(), sizeof(ftyp), 1, file_);
   return fwrite(&mdat_, sizeof(mdat_), 1, file_);
 }
 
-inline size_t Mp4::WriteBoxMoov() {
+inline size_t Mp4::WriteMoov() {
   libmp4::box::moov moov = {0};
   int len = trakv_.Marshal(&moov.mvhd.duration);
   int len1 = traka_.MakeAudio()->Marshal(nullptr);
@@ -50,7 +50,7 @@ inline size_t Mp4::WriteBoxMoov() {
 
 inline void Mp4::Close() {
   if (file_) {
-    WriteBoxMoov();
+    WriteMoov();
     fclose(file_);
     file_ = NULL;
   }
@@ -61,21 +61,24 @@ inline int Mp4::WriteFrame(int64_t ts, uint8_t ftype, char *data, size_t len) {
   if (file_ == NULL) {
     return -1;
   }
-  libmp4::Trak *trak = &traka_;
   if (ftype < 3) {
     nalu::Units nalus;
     data = nalu::Split(data, len, nalus);
     if (mdat_.type == 0 && ftype == 1) {
       trakv_.MakeVideo(nalus);
-      WriteBoxFtyp();
+      WriteFtyp();
     }
-    trak = &trakv_;
   }
   if (mdat_.type == 0) {
     return 0;
   }
+  if (ftype == 3) {
+    // stbl信息
+    traka_.AppendSample(ts, mdat_.size, u32(len), false);
+    return fwrite(data, len, 1, file_);
+  }
   // stbl信息
-  trak->AppendSample(ts, mdat_.size, u32(len + 4), ftype == 1);
+  trakv_.AppendSample(ts, mdat_.size, u32(len + 4), ftype == 1);
   // mdat数据
   uint32_t slen = libmp4::HTOBE32(u32(len));
   fwrite((char *)&slen, sizeof(uint32_t), 1, file_);

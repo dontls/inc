@@ -39,7 +39,7 @@ static void Matrix(u32 *matrix) {
   matrix[8] = HTOBE32(0x40000000);
 }
 
-#define HTOBE32_SIZEOF(x) HTOBE32(sizeof(x))
+#define BESIZEOF(x) HTOBE32(sizeof(x))
 
 namespace box {
 #pragma pack(1)
@@ -55,7 +55,7 @@ struct ftyp {
 };
 
 inline void *ftyp::Marshal() {
-  size = HTOBE32_SIZEOF(ftyp);
+  size = BESIZEOF(ftyp);
   type = LE32TYPE("ftyp");
   brand = LE32TYPE("isom");
   version = HTOBE32(512);
@@ -131,7 +131,7 @@ struct stsda {
       u8 version;
       u8 flags[3];
       u8 esdesc_tag;    // 0x03
-      u16 esdesc_len;   // ((25 << 8) | 0x80)
+      u8 esdesc_len;    // ((25 << 8) | 0x80)
       u16 esdesc_id;    // 0x0200
       u8 esdesc_flags;  // 0x00
       u8 deccfg_tag;    // 0x04
@@ -142,9 +142,9 @@ struct stsda {
       u32 deccfg_max_bitrate;
       u32 deccfg_avg_bitrate;
       //++ if deccfg_object == aac
-      // u8 decspec_tag; // 0x05
-      // u8 decspec_len; // 2
-      // u16 decspec_info;
+      u8 decspec_tag; // 0x05
+      u8 decspec_len; // 2
+      u16 decspec_info;
       // //-- if deccfg_object == aac
       u8 slcfg_tag;      // 0x06
       u8 slcfg_len;      // 1
@@ -155,28 +155,28 @@ struct stsda {
 };
 
 inline const char *stsda::Marshal() {
-  size = HTOBE32_SIZEOF(stsda);
+  size = BESIZEOF(stsda);
   type = LE32TYPE("stsd");
   entry_count = HTOBE32(1);
-  mp4a.size = HTOBE32_SIZEOF(mp4a);
+  mp4a.size = BESIZEOF(mp4a);
   mp4a.type = LE32TYPE("mp4a");
   mp4a.data_refidx = u16(HTOBE32(1) >> 16);
   mp4a.channel_num = u16(HTOBE32(1) >> 16);
   mp4a.sample_size = u16(HTOBE32(16) >> 16);
   mp4a.sample_rate = HTOBE32(8000 << 16);
-  mp4a.esds.size = HTOBE32_SIZEOF(mp4a.esds);
+  mp4a.esds.size = BESIZEOF(mp4a.esds);
   mp4a.esds.type = LE32TYPE("esds");
   mp4a.esds.esdesc_tag = 0x03;
-  mp4a.esds.esdesc_len = u16(21 << 8 | 0x80);
+  mp4a.esds.esdesc_len = 25;
   mp4a.esds.esdesc_id = 0x0200;
   mp4a.esds.esdesc_flags = 0x00;
   mp4a.esds.deccfg_tag = 0x04;
-  mp4a.esds.deccfg_len = 13;
+  mp4a.esds.deccfg_len = 17;
   mp4a.esds.deccfg_object = 0x40;
   mp4a.esds.deccfg_stream = 0x15;
-  // mp4a.esds.decspec_tag = 0x05;
-  // mp4a.esds.decspec_len = 2;
-  // mp4a.esds.decspec_info = 0x8815;
+  mp4a.esds.decspec_tag = 0x05;
+  mp4a.esds.decspec_len = 2;
+  mp4a.esds.decspec_info = 0x9015;
   mp4a.esds.slcfg_tag = 0x06;
   mp4a.esds.slcfg_len = 1;
   mp4a.esds.slcfg_reserved = 0x02;
@@ -196,7 +196,7 @@ struct stts {
 };
 
 inline const char *stts::Marshal(u32 num, u32 dur) {
-  size = HTOBE32_SIZEOF(stts);
+  size = BESIZEOF(stts);
   type = LE32TYPE("stts");
   count = HTOBE32(1);
   sample_counts = HTOBE32(num);
@@ -366,7 +366,7 @@ struct trak {
 
 inline const char *trak::Marshal(u32 id, u32 length) {
   // tkhd
-  tkhd.size = HTOBE32_SIZEOF(tkhd);
+  tkhd.size = BESIZEOF(tkhd);
   tkhd.type = LE32TYPE("tkhd");
   tkhd.flags[2] = 0xF;
   tkhd.trackid = HTOBE32(id);
@@ -375,35 +375,34 @@ inline const char *trak::Marshal(u32 id, u32 length) {
   tkhd.height = HTOBE32(tkhd.height << 16); //
 
   // mdhd
-  mdia.mdhd.size = HTOBE32_SIZEOF(mdia.mdhd);
+  mdia.mdhd.size = BESIZEOF(mdia.mdhd);
   mdia.mdhd.type = LE32TYPE("mdhd");
 
   mdia.mdhd.language = 0xc455; // und
+  mdia.mdhd.timescale = HTOBE32(1000);
   // hdlr
-  mdia.hdlr.size = HTOBE32_SIZEOF(mdia.hdlr);
+  mdia.hdlr.size = BESIZEOF(mdia.hdlr);
   mdia.hdlr.type = LE32TYPE("hdlr");
   if (id == 1) {
-    mdia.mdhd.timescale = HTOBE32(1000);
     mdia.hdlr.handler_type = LE32TYPE("vide");
     mdia.minf.vmhd.type = LE32TYPE("vmhd");
     ::strcpy((char *)mdia.hdlr.name, "VideoHandler");
   } else {
-    mdia.mdhd.timescale = HTOBE32(8000);
     mdia.hdlr.handler_type = LE32TYPE("soun");
     mdia.minf.vmhd.type = LE32TYPE("smhd"); // 音频
     ::strcpy((char *)mdia.hdlr.name, "SoundHandler");
   }
-  mdia.minf.vmhd.size = HTOBE32_SIZEOF(mdia.minf.vmhd);
+  mdia.minf.vmhd.size = BESIZEOF(mdia.minf.vmhd);
   mdia.minf.vmhd.flags[2] = 1;
 
-  mdia.minf.dinf.size = HTOBE32_SIZEOF(mdia.minf.dinf);
+  mdia.minf.dinf.size = BESIZEOF(mdia.minf.dinf);
   mdia.minf.dinf.type = LE32TYPE("dinf");
 
-  mdia.minf.dinf.dref.url.size = HTOBE32_SIZEOF(mdia.minf.dinf.dref.url);
+  mdia.minf.dinf.dref.url.size = BESIZEOF(mdia.minf.dinf.dref.url);
   mdia.minf.dinf.dref.url.type = LE32TYPE("url ");
   mdia.minf.dinf.dref.url.flags[2] = 1;
 
-  mdia.minf.dinf.dref.size = HTOBE32_SIZEOF(mdia.minf.dinf.dref);
+  mdia.minf.dinf.dref.size = BESIZEOF(mdia.minf.dinf.dref);
   mdia.minf.dinf.dref.type = LE32TYPE("dref");
   mdia.minf.dinf.dref.entry_count = HTOBE32(1);
 
@@ -453,7 +452,7 @@ struct moov {
 inline void *moov::Marshal(u32 len1, u32 len2) {
   size = HTOBE32(sizeof(moov) + len1 + len2);
   type = LE32TYPE("moov");
-  mvhd.size = HTOBE32_SIZEOF(mvhd);
+  mvhd.size = BESIZEOF(mvhd);
   mvhd.type = LE32TYPE("mvhd");
   mvhd.create_time = HTOBE32((u32)time(NULL));
   mvhd.modify_time = mvhd.create_time;
@@ -632,9 +631,6 @@ inline int Trak::Marshal(u32 *dur) {
   u32 rdur = lsts_ - firts_;
   if (dur != nullptr) {
     *dur = HTOBE32(rdur);
-  }
-  if (id_ > 1) {
-    rdur *= 8; // 8000 timescale
   }
   trak_.tkhd.duration = HTOBE32(rdur);
   trak_.mdia.mdhd.duration = HTOBE32(rdur);
