@@ -13,18 +13,12 @@ static char _nalu_header[] = {0x00, 0x00, 0x00, 0x01};
 
 namespace librtp {
 
-#define RTP_HEADER_SIZE 12
-#define RTP_MAX_SIZE 1438
-
-class Packet {
-private:
+struct Header {
   /* byte 0 */
   uint8_t csrcLen : 4;
   uint8_t extension : 1;
   uint8_t padding : 1;
   uint8_t version : 2;
-
-public:
   /* byte 1 */
   uint8_t payloadType : 7;
   uint8_t marker : 1;
@@ -34,6 +28,16 @@ public:
   unsigned int timestamp;
   /* bytes 8-11 */
   uint32_t ssrc;
+};
+
+#define RTP_HEADER_SIZE 12
+#define RTP_MAX_SIZE 1438
+
+class Packet {
+private:
+  Header hr_ = {};
+
+public:
   // payload
   uint8_t *data;
   // payload size
@@ -62,7 +66,7 @@ private:
       b.WriteByte(ntype | 0x60);
     }
     b.Write((char *)data, size);
-    if (marker == 1 && (ntype == 1 || ntype == 5)) {
+    if (hr_.marker == 1 && (ntype == 1 || ntype == 5)) {
       return ntype;
     }
     // printf("rtp size %d %d %ld\n", r->size, ntype, b.Len());
@@ -94,7 +98,7 @@ private:
     }
     b.Write((char *)data, size);
     // printf("rtp size %d %ld\n", r->size, b.Len());
-    if (marker == 1 && (sflag & 0x40) > 0) {
+    if (hr_.marker == 1 && (sflag & 0x40) > 0) {
       ntype = (b.Bytes()[4] & 0x7e) >> 1;
       return ntype;
     }
@@ -102,26 +106,25 @@ private:
   }
 
 public:
+  uint8_t PayloadType() { return hr_.payloadType; }
+
   Packet *Unmarshal(uint8_t *b, int len) {
-    csrcLen = b[0] >> 4;
-    extension = (b[0] >> 3) & 0x01;
-    padding = (b[0] >> 2) & 0x01;
-    version = b[0] & 0x03;
-    payloadType = b[1] & 0x7F;
-    marker = b[1] >> 7;
-    seq = Uint16(&b[2]);
-    timestamp = Uint32(&b[4]);
-    ssrc = Uint32(&b[8]);
+    hr_.csrcLen = b[0] >> 4;
+    hr_.extension = (b[0] >> 3) & 0x01;
+    hr_.padding = (b[0] >> 2) & 0x01;
+    hr_.version = b[0] & 0x03;
+    hr_.payloadType = b[1] & 0x7F;
+    hr_.marker = b[1] >> 7;
+    hr_.seq = Uint16(&b[2]);
+    hr_.timestamp = Uint32(&b[4]);
+    hr_.ssrc = Uint32(&b[8]);
     data = b + RTP_HEADER_SIZE;
     size = len - RTP_HEADER_SIZE;
     return this;
   }
 
-  uint8_t Decode(std::string &e, libyte::Buffer &b) {
-    if (payloadType == 96) {
-      return UnmarshalAVC(e, b);
-    }
-    return UnmarshalHVC(e, b);
+  uint8_t Decode(std::string &e, libyte::Buffer &b, bool bHevc) {
+    return bHevc ? UnmarshalHVC(e, b) : UnmarshalAVC(e, b);
   }
 };
 

@@ -129,73 +129,69 @@ struct sdp {
   std::string content;
   std::string session;
   struct media {
-    int format; // 96 /98
-    std::string name;
+    int format;        // 96 /98
+    std::string stype; // stream type video/audio
     std::string rtpmap;
     std::string sprops;
-    std::string id;
+    std::string name;
+    std::string control_id;
+    bool hevc;
   };
   std::string spsvalue;
   std::vector<media> medias;
-  std::map<int, std::string> formats;
+  std::map<int, media> formats;
   void Parse(std::vector<std::string> &ss);
 };
 
 inline void sdp::Parse(std::vector<std::string> &ss) {
   media *it = nullptr;
-  for (size_t j = 0; j < ss.size(); j++) {
-    std::string &s = ss[j];
+  for (auto &s : ss) {
     size_t pos = s.find("Session: ");
     if (pos != std::string::npos) {
       session = s.substr(9);
     } else if ((pos = s.find("m=")) != std::string::npos) {
       medias.resize(medias.size() + 1);
       it = &medias.back();
-      it->name = std::string(s.c_str() + 2);
+      it->stype = std::string(s.c_str() + 2);
     } else if (it != nullptr) {
       if ((pos = s.find("a=rtpmap:")) != std::string::npos) {
         std::istringstream sline(s.c_str() + 9);
         sline >> it->format >> it->rtpmap;
         if ((pos = it->rtpmap.find_first_of("/")) != std::string::npos) {
-          formats[it->format] = it->rtpmap.substr(0, pos);
+          it->name = it->rtpmap.substr(0, pos);
         }
+        it->hevc = (it->name == "H265");
       } else if ((pos = s.find("sprop")) != std::string::npos) {
         it->sprops = s.substr(pos);
       } else if ((pos = s.find("a=control:")) != std::string::npos) {
-        it->id = s.substr(pos + 10);
-        if ((pos = it->id.rfind("/")) != std::string::npos) {
-          it->id = it->id.substr(pos + 1);
+        it->control_id = s.substr(pos + 10);
+        if ((pos = it->control_id.rfind("/")) != std::string::npos) {
+          it->control_id = it->control_id.substr(pos + 1);
         }
+        formats[it->format] = *it;
       }
     }
   }
   auto m = std::find_if(medias.begin(), medias.end(), [](sdp::media &m) {
-    return m.name.find("video") != std::string::npos;
+    return m.stype.find("video") != std::string::npos;
   });
   if (m == medias.end()) {
     return;
   }
-  std::string sps, pps, vps;
-  if (m->format == 96) {
-    // sprop-parameter-sets=
-    sps = findVar(m->sprops, "sprop-parameter-sets=", ",");
-    pps = findVar(m->sprops, ",", ",");
-  } else {
-    // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
-    vps = findVar(m->sprops, "vps=", ";");
-    sps = findVar(m->sprops, "sps=", ";");
-    pps = findVar(m->sprops, "pps=", ";");
-  }
-  if (sps.empty()) {
-    return;
-  }
   spsvalue = std::string(_nalu_header, 4);
-  spsvalue.append(base64_decode(sps));
-  spsvalue.append(_nalu_header, 4);
-  spsvalue.append(base64_decode(pps));
-  if (!vps.empty()) {
+  if (it->hevc) {
+    // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
+    spsvalue.append(base64_decode(findVar(m->sprops, "sps=", ";")));
     spsvalue.append(_nalu_header, 4);
-    spsvalue.append(base64_decode(vps));
+    spsvalue.append(base64_decode(findVar(m->sprops, "pps=", ";")));
+    spsvalue.append(_nalu_header, 4);
+    spsvalue.append(base64_decode(findVar(m->sprops, "vps=", ";")));
+  } else {
+    std::string sps = findVar(m->sprops, "sprop-parameter-sets=", ",");
+    spsvalue.append(base64_decode(sps));
+    std::string pps = findVar(m->sprops, ",", ",");
+    spsvalue.append(_nalu_header, 4);
+    spsvalue.append(base64_decode(pps));
   }
 }
 
@@ -352,22 +348,20 @@ public:
           }
           auto rtp = rtp_.Unmarshal(b + 4, dlen - 4);
           if (callFrame) {
-            if (rtp->payloadType == 96 || rtp->payloadType == 98) {
-              uint8_t ftype = rtp->Decode(sdp_.spsvalue, dbuf_);
+            auto &m = sdp_.formats[rtp->PayloadType()];
+            if (!m.sprops.empty()) {
+              uint8_t ftype = rtp->Decode(sdp_.spsvalue, dbuf_, m.hevc);
               if (ftype > 0) {
                 ftype = ftype == 1 ? 2 : 1;
-                auto &fmt = sdp_.formats[rtp->payloadType];
-                callFrame(fmt.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
+                callFrame(m.name.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
                 dbuf_.Reset();
               }
-            } else if (rtp->payloadType == atype_) {
-              auto &fmt = sdp_.formats[rtp->payloadType];
-              callFrame(fmt.c_str(), 3, (char *)rtp->data, rtp->size);
+            } else if (m.format == atype_) {
+              callFrame(m.name.c_str(), 3, (char *)rtp->data, rtp->size);
             }
           }
-          LibRtspDebug("rtp type %d %u marker %d, channel %d, %d\n",
-                       rtp->payloadType, rtp->timestamp, rtp->marker, ch, dlen);
-          // 保活机制
+          // LibRtspDebug("rtp type %d ch %d, %d\n", rtp->PayloadType(), ch,
+          // dlen); 保活机制
           if (libtime::Since(ts) > 10000) {
             ts = libtime::UnixMilli();
             this->doKeepalive(rtp);
@@ -450,9 +444,9 @@ private:
       sdp_.Parse(res);
       auto m = std::find_if(sdp_.medias.begin(), sdp_.medias.end(),
                             [](sdp::media &m) {
-                              return m.name.find("video") != std::string::npos;
+                              return m.stype.find("video") != std::string::npos;
                             });
-      doWriteCmd(SETUP, m->id.c_str(), seq_++, sdp_.session.c_str(),
+      doWriteCmd(SETUP, m->control_id.c_str(), seq_++, sdp_.session.c_str(),
                  url_.GetAuth("SETUP").c_str());
       cmd_ = SETAUDIO;
       break;
@@ -470,11 +464,11 @@ private:
       if (atype_ == 0xff) {
         auto m = std::find_if(
             sdp_.medias.begin(), sdp_.medias.end(), [](sdp::media &m) {
-              return m.name.find("audio") != std::string::npos;
+              return m.stype.find("audio") != std::string::npos;
             });
         if (m != sdp_.medias.end()) {
           atype_ = m->format;
-          doWriteCmd(SETUP, m->id.c_str(), seq_++, sdp_.session.c_str(),
+          doWriteCmd(SETUP, m->control_id.c_str(), seq_++, sdp_.session.c_str(),
                      url_.GetAuth("SETUP").c_str());
           break;
         }
