@@ -656,7 +656,6 @@ inline TcpConn::TcpConn(socket_t p_socket)
 //              rejects the connection.
 // ====================================================================
 inline void TcpConn::Dial(const char *p_addr, port p_port) {
-  int err;
 
   // if the socket is already connected...
   if (m_connected == true) {
@@ -678,7 +677,7 @@ inline void TcpConn::Dial(const char *p_addr, port p_port) {
 
   // now the socket is created, so connect it.
   socklen_t s = sizeof(struct sockaddr);
-  err = connect(m_sock, (struct sockaddr *)(&m_remoteinfo), s);
+  int err = connect(m_sock, (struct sockaddr *)(&m_remoteinfo), s);
   if (err == -1) {
     throw Exception(GetError());
   }

@@ -179,7 +179,7 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
     return;
   }
   spsvalue = std::string(_nalu_header, 4);
-  if (it->hevc) {
+  if (m->hevc) {
     // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
     spsvalue.append(base64_decode(findVar(m->sprops, "sps=", ";")));
     spsvalue.append(_nalu_header, 4);
@@ -304,7 +304,7 @@ class Client : libnet::TcpConn {
 private:
   int cmd_, seq_;
   librtp::Packet rtp_;
-  uint8_t atype_; // audio rtp type
+  int8_t atype_; // audio rtp type
   url url_;
   sdp sdp_;
   libyte::Buffer dbuf_;
@@ -312,13 +312,13 @@ private:
 public:
   Client(bool reqAudio = false)
       : cmd_(0), seq_(0), rtp_{}, OnRTPAnyPacket(nullptr) {
-    atype_ = reqAudio ? 0xff : 0;
+    atype_ = reqAudio ? 0x7f : -1;
   }
   ~Client() { Close(); }
   // 转发rtp包代理
   std::function<void(uint8_t *, int)> OnRTPAnyPacket;
   // 解析帧
-  using OnFrame = std::function<void(const char *, uint8_t, char *, size_t)>;
+  using OnFrame = std::function<int(const char *, uint8_t, char *, size_t)>;
 
   // rtsp://admin:123456@127.0.0.1:554/test.mp4
   bool Play(const char *sUrl, OnFrame callFrame) {
@@ -347,18 +347,23 @@ public:
             this->OnRTPAnyPacket(b, dlen);
           }
           auto rtp = rtp_.Unmarshal(b + 4, dlen - 4);
+          int ret = 0;
           if (callFrame) {
             auto &m = sdp_.formats[rtp->PayloadType()];
             if (!m.sprops.empty()) {
               uint8_t ftype = rtp->Decode(sdp_.spsvalue, dbuf_, m.hevc);
               if (ftype > 0) {
                 ftype = ftype == 1 ? 2 : 1;
-                callFrame(m.name.c_str(), ftype, dbuf_.Bytes(), dbuf_.Len());
+                ret = callFrame(m.name.c_str(), ftype, dbuf_.Bytes(),
+                                dbuf_.Len());
                 dbuf_.Reset();
               }
             } else if (m.format == atype_) {
-              callFrame(m.name.c_str(), 3, (char *)rtp->data, rtp->size);
+              ret = callFrame(m.name.c_str(), 3, (char *)rtp->data, rtp->size);
             }
+          }
+          if (ret) {
+            return -1;
           }
           // LibRtspDebug("rtp type %d ch %d, %d\n", rtp->PayloadType(), ch,
           // dlen); 保活机制
@@ -461,7 +466,7 @@ private:
           sdp_.session = it->substr(9, pos - 9);
         }
       }
-      if (atype_ == 0xff) {
+      if (atype_ == 0x7f) {
         auto m = std::find_if(
             sdp_.medias.begin(), sdp_.medias.end(), [](sdp::media &m) {
               return m.stype.find("audio") != std::string::npos;
