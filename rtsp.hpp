@@ -25,7 +25,8 @@
 
 namespace librtsp {
 
-inline std::string findVar(std::string &str, const char *s, const char *e) {
+inline std::string findVar(const std::string &str, const char *s,
+                           const char *e) {
   auto p0 = str.find(s);
   if (p0 == std::string::npos) {
     return "";
@@ -168,30 +169,30 @@ inline void sdp::Parse(std::vector<std::string> &ss) {
         if ((pos = it->control_id.rfind("/")) != std::string::npos) {
           it->control_id = it->control_id.substr(pos + 1);
         }
-        formats[it->format] = *it;
       }
     }
   }
-  auto m = std::find_if(medias.begin(), medias.end(), [](sdp::media &m) {
-    return m.stype.find("video") != std::string::npos;
-  });
-  if (m == medias.end()) {
-    return;
-  }
-  spsvalue = std::string(_nalu_header, 4);
-  if (m->hevc) {
-    // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
-    spsvalue.append(base64_decode(findVar(m->sprops, "sps=", ";")));
-    spsvalue.append(_nalu_header, 4);
-    spsvalue.append(base64_decode(findVar(m->sprops, "pps=", ";")));
-    spsvalue.append(_nalu_header, 4);
-    spsvalue.append(base64_decode(findVar(m->sprops, "vps=", ";")));
-  } else {
-    std::string sps = findVar(m->sprops, "sprop-parameter-sets=", ",");
-    spsvalue.append(base64_decode(sps));
-    std::string pps = findVar(m->sprops, ",", ",");
-    spsvalue.append(_nalu_header, 4);
-    spsvalue.append(base64_decode(pps));
+
+  for (const auto &m : medias) {
+    formats[m.format] = m;
+    if (m.stype.find("video") == std::string::npos) {
+      continue;
+    }
+    spsvalue = std::string(_nalu_header, 4);
+    if (m.hevc) {
+      // sprop-vps=QAEMAf//IWAAAAMAAAMAAAMAAAMAlqwJ;sprop-sps=QgEBIWAAAAMAAAMAAAMAAAMAlqADwIARB8u605KJLuagQEBAgAg9YADN/mAE;sprop-pps=RAHAcvAbJA==
+      spsvalue.append(base64_decode(findVar(m.sprops, "sps=", ";")));
+      spsvalue.append(_nalu_header, 4);
+      spsvalue.append(base64_decode(findVar(m.sprops, "pps=", ";")));
+      spsvalue.append(_nalu_header, 4);
+      spsvalue.append(base64_decode(findVar(m.sprops, "vps=", ";")));
+    } else {
+      std::string sps = findVar(m.sprops, "sprop-parameter-sets=", ",");
+      spsvalue.append(base64_decode(sps));
+      std::string pps = findVar(m.sprops, ",", ",");
+      spsvalue.append(_nalu_header, 4);
+      spsvalue.append(base64_decode(pps));
+    }
   }
 }
 
@@ -365,8 +366,8 @@ public:
           if (ret) {
             return -1;
           }
-          // LibRtspDebug("rtp type %d ch %d, %d\n", rtp->PayloadType(), ch,
-          // dlen); 保活机制
+          LibRtspDebug("rtp type %d ch %d, %d\n", rtp->PayloadType(), ch, dlen);
+          // 保活机制
           if (libtime::Since(ts) > 10000) {
             ts = libtime::UnixMilli();
             this->doKeepalive(rtp);
@@ -404,6 +405,22 @@ private:
     // this->Write((char *)&pkt, sizeof(pkt));
   }
 
+  bool checkAuthorized(std::vector<std::string> &res, int type,
+                       const char *cmd) {
+    auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
+      return s.find("WWW-Authenticate") != std::string::npos;
+    });
+    if (it == res.end()) {
+      return true;
+    }
+    if (!url_.baseAuth.empty()) {
+      throw libnet::Exception(libnet::EAccessDenied);
+    }
+    url_.SetAuth(it->c_str());
+    doWriteCmd(type, seq_++, url_.GetAuth(cmd).c_str());
+    return false;
+  }
+
   int doRtspParse(char *b, int len) {
     char *h0 = strstr(b, "\r\n\r\n");
     if (h0 == nullptr) {
@@ -429,33 +446,24 @@ private:
     }
     LibRtspDebug("%d read --> \n%s", len, hs.c_str());
     switch (cmd_) {
-    case OPTIONS: {
-      auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
-        return s.find("WWW-Authenticate") != std::string::npos;
-      });
-      if (it == res.end()) {
+    case OPTIONS:
+      if (checkAuthorized(res, OPTIONS, "OPTIONS")) {
         doWriteCmd(DESCRIBE, seq_++, url_.GetAuth("DESCRIBE").c_str());
-      } else {
-        if (!url_.baseAuth.empty()) {
-          throw libnet::Exception(libnet::EAccessDenied);
-        }
-        url_.SetAuth(it->c_str());
-        doWriteCmd(OPTIONS, seq_++, url_.GetAuth("OPTIONS").c_str());
       }
       break;
-    };
-    case DESCRIBE: {
-      sdp_.content = hs.substr(hlen);
-      sdp_.Parse(res);
-      auto m = std::find_if(sdp_.medias.begin(), sdp_.medias.end(),
-                            [](sdp::media &m) {
-                              return m.stype.find("video") != std::string::npos;
-                            });
-      doWriteCmd(SETUP, m->control_id.c_str(), seq_++, sdp_.session.c_str(),
-                 url_.GetAuth("SETUP").c_str());
-      cmd_ = SETAUDIO;
+    case DESCRIBE:
+      if (checkAuthorized(res, DESCRIBE, "DESCRIBE")) {
+        sdp_.content = hs.substr(hlen);
+        sdp_.Parse(res);
+        auto m = std::find_if(
+            sdp_.medias.begin(), sdp_.medias.end(), [](sdp::media &m) {
+              return m.stype.find("video") != std::string::npos;
+            });
+        doWriteCmd(SETUP, m->control_id.c_str(), seq_++, sdp_.session.c_str(),
+                   url_.GetAuth("SETUP").c_str());
+        cmd_ = SETAUDIO;
+      }
       break;
-    };
     case SETAUDIO: {
       if (sdp_.session.empty()) {
         auto it = std::find_if(res.begin(), res.end(), [&](std::string &s) {
