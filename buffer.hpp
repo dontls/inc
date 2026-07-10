@@ -9,10 +9,6 @@
 
 namespace libyte {
 class Buffer {
-private:
-  std::mutex lock_;
-  std::vector<char> v_;
-
 public:
   Buffer() {}
   Buffer(size_t n) { v_.reserve(n); }
@@ -64,6 +60,10 @@ public:
     }
     v_.resize(0);
   }
+
+private:
+  std::mutex lock_;
+  std::vector<char> v_;
 
 private:
   Buffer(const Buffer &) = delete;

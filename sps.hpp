@@ -245,13 +245,180 @@ inline bool decode_sps(std::string &s, UINT &width, UINT &height, int &fps) {
     Ue(buf, nLen, StartBit);
     Ue(buf, nLen, StartBit);
   }
+  fps = 25;
   uint32_t bit_depth_luma_minus8 = Ue(buf, nLen, StartBit);
   uint32_t bit_depth_chroma_minus8 = Ue(buf, nLen, StartBit);
   if (bit_depth_luma_minus8 != bit_depth_chroma_minus8) {
     return false;
   } //...
-  fps = 25;
-  return true;
+	// 快速跳到VUI参数
+	Ue(buf, nLen, StartBit);  // log2_max_pic_order_cnt_lsb_minus4
+	int sps_sub_layer_ordering_info_present_flag = u(1, buf, StartBit);
+	
+	// 跳过sps_max_dec_pic_buffering_minus1, sps_max_num_reorder_pics, sps_max_latency_increase_plus1
+	for (int i = (sps_sub_layer_ordering_info_present_flag ? 0 : sps_max_sub_layers_minus1);
+		i <= sps_max_sub_layers_minus1; i++) {
+		Ue(buf, nLen, StartBit);  // sps_max_dec_pic_buffering_minus1[i]
+		Ue(buf, nLen, StartBit);  // sps_max_num_reorder_pics[i]
+		Ue(buf, nLen, StartBit);  // sps_max_latency_increase_plus1
+	}
+	
+	// 跳过编码单元相关参数
+	Ue(buf, nLen, StartBit);  // log2_min_luma_coding_block_size_minus3
+	Ue(buf, nLen, StartBit);  // log2_diff_max_min_luma_coding_block_size
+	Ue(buf, nLen, StartBit);  // log2_min_transform_block_size_minus2
+	Ue(buf, nLen, StartBit);  // log2_diff_max_min_transform_block_size
+	Ue(buf, nLen, StartBit);  // max_transform_hierarchy_depth_inter
+	Ue(buf, nLen, StartBit);  // max_transform_hierarchy_depth_intra
+	
+	// scaling_list_enabled_flag
+	if (u(1, buf, StartBit)) {  // scaling_list_enabled_flag
+		if (u(1, buf, StartBit)) {  // sps_scaling_list_data_present_flag
+			// 快速跳过scaling_list_data
+			for (int sizeId = 0; sizeId < 4; sizeId++) {
+				for (int matrixId = 0; matrixId < 6; matrixId += (sizeId == 3) ? 3 : 1) {
+					if (!u(1, buf, StartBit)) {  // scaling_list_pred_mode_flag
+						Ue(buf, nLen, StartBit);  // scaling_list_pred_matrix_id_delta
+					} else {
+						int coefNum = (1 << (4 + (sizeId << 1)));
+						if ( coefNum > 64) {
+							coefNum = 64;
+						}
+						if (sizeId > 1) {
+							Se(buf, nLen, StartBit);  // scaling_list_dc_coef_minus8
+						}
+						for (int i = 0; i < coefNum; i++) {
+							Se(buf, nLen, StartBit);  // scaling_list_delta_coef
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// 跳过几个标志位
+	u(1, buf, StartBit);  // amp_enabled_flag
+	u(1, buf, StartBit);  // sample_adaptive_offset_enabled_flag
+	
+	// pcm_enabled_flag
+	if (u(1, buf, StartBit)) {
+		u(4, buf, StartBit);  // pcm_sample_bit_depth_luma_minus1
+		u(4, buf, StartBit);  // pcm_sample_bit_depth_chroma_minus1
+		Ue(buf, nLen, StartBit);  // log2_min_pcm_luma_coding_block_size_minus3
+		Ue(buf, nLen, StartBit);  // log2_diff_max_min_pcm_luma_coding_block_size
+		u(1, buf, StartBit);  // pcm_loop_filter_disabled_flag
+	}
+	
+	// 跳过short_term_ref_pic_set
+	int num_short_term_ref_pic_sets = Ue(buf, nLen, StartBit);
+	for (int i = 0; i < num_short_term_ref_pic_sets; i++) {
+		if (i != 0 && u(1, buf, StartBit)) {  // inter_ref_pic_set_prediction_flag
+			if (i == num_short_term_ref_pic_sets) {
+				Ue(buf, nLen, StartBit);  // delta_idx_minus1
+			}
+			u(1, buf, StartBit);  // delta_rps_sign
+			Ue(buf, nLen, StartBit);  // abs_delta_rps_minus1
+			for (int j = 0; j <= 0; j++) {  // 简化处理
+				if (!u(1, buf, StartBit)) {  // used_by_curr_pic_flag
+					u(1, buf, StartBit);  // use_delta_flag
+				}
+			}
+		} else {
+			int num_negative_pics = Ue(buf, nLen, StartBit);
+			int num_positive_pics = Ue(buf, nLen, StartBit);
+			for (int j = 0; j < num_negative_pics; j++) {
+				Ue(buf, nLen, StartBit);
+				u(1, buf, StartBit);
+			}
+			for (int j = 0; j < num_positive_pics; j++) {
+				Ue(buf, nLen, StartBit);
+				u(1, buf, StartBit);
+			}
+		}
+	}
+	
+	// long_term_ref_pics_present_flag
+	if (u(1, buf, StartBit)) {
+		int num_long_term_ref_pics_sps = Ue(buf, nLen, StartBit);
+		for (int i = 0; i < num_long_term_ref_pics_sps; i++) {
+			u(16, buf, StartBit);  // 跳过lt_ref_pic_poc_lsb_sps
+			u(1, buf, StartBit);  // used_by_curr_pic_lt_sps_flag
+		}
+	}
+	
+	// 跳过剩余标志位
+	u(1, buf, StartBit);  // sps_temporal_mvp_enabled_flag
+	u(1, buf, StartBit);  // strong_intra_smoothing_enabled_flag
+	
+	// vui_parameters_present_flag
+	int vui_parameters_present_flag = u(1, buf, StartBit);
+	
+	// 解析VUI参数以获取fps
+	if (vui_parameters_present_flag) {
+		// 跳过aspect_ratio_info
+		if (u(1, buf, StartBit)) {  // vui_aspect_ratio_info_present_flag
+			int vui_aspect_ratio_idc = u(8, buf, StartBit);
+			if (vui_aspect_ratio_idc == 255) {
+				u(16, buf, StartBit);  // vui_sar_width
+				u(16, buf, StartBit);  // vui_sar_height
+			}
+		}
+		
+		// 跳过overscan_info
+		if (u(1, buf, StartBit)) {  // vui_overscan_info_present_flag
+			u(1, buf, StartBit);  // vui_overscan_appropriate_flag
+		}
+		
+		// 跳过video_signal_type
+		if (u(1, buf, StartBit)) {  // vui_video_signal_type_present_flag
+			u(3, buf, StartBit);  // vui_video_format
+			u(1, buf, StartBit);  // vui_video_full_range_flag
+			if (u(1, buf, StartBit)) {  // vui_colour_description_present_flag
+				u(8, buf, StartBit);  // vui_colour_primaries
+				u(8, buf, StartBit);  // vui_transfer_characteristics
+				u(8, buf, StartBit);  // vui_matrix_coeffs
+			}
+		}
+		
+		// 跳过chroma_loc_info
+		if (u(1, buf, StartBit)) {  // vui_chroma_loc_info_present_flag
+			Ue(buf, nLen, StartBit);  // vui_chroma_sample_loc_type_top_field
+			Ue(buf, nLen, StartBit);  // vui_chroma_sample_loc_type_bottom_field
+		}
+		
+		// 跳过几个标志位
+		u(1, buf, StartBit);  // vui_neutral_chroma_indication_flag
+		u(1, buf, StartBit);  // vui_field_seq_flag
+		u(1, buf, StartBit);  // vui_frame_field_info_present_flag
+		
+		// 跳过default_display_window
+		if (u(1, buf, StartBit)) {  // vui_default_display_window_flag
+			Ue(buf, nLen, StartBit);  // vui_def_disp_win_left_offset
+			Ue(buf, nLen, StartBit);  // vui_def_disp_win_right_offset
+			Ue(buf, nLen, StartBit);  // vui_def_disp_win_top_offset
+			Ue(buf, nLen, StartBit);  // vui_def_disp_win_bottom_offset
+		}
+		
+		// vui_timing_info_present_flag - 关键标志，决定是否有时序信息
+		int vui_timing_info_present_flag = u(1, buf, StartBit);
+		if (vui_timing_info_present_flag) {
+			unsigned int vui_num_units_in_tick = u(32, buf, StartBit);
+			unsigned int vui_time_scale = u(32, buf, StartBit);
+			
+			// 计算帧率
+			if (vui_num_units_in_tick > 0 && vui_time_scale > 0) {
+				// 根据H.265标准，帧率 = vui_time_scale / (2 * vui_num_units_in_tick)
+				double frame_rate = (double)vui_time_scale / (2.0 * (double)vui_num_units_in_tick);
+				fps = (int)(frame_rate + 0.5);
+				
+				// 验证帧率合理性
+				if (fps <= 0 || fps > 1000) {
+					fps = 25;  // 默认帧率
+				}
+			}
+		}
+	}
+	return true;
 }
 } // namespace hevc
 

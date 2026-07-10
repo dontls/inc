@@ -161,19 +161,20 @@ inline libyte::Buffer *Packet::Marshal(std::string &s) {
 
 inline libyte::Slice Packet::Pack(int tag, uint32_t ts) {
   size_t dlen = buf_.Len() - offset_ + 11;
-  libyte::Slice s(buf_.Bytes(), offset_ - 11);
-  s.AppendU8(tag);
-  s.AppendU8(dlen >> 16); // data len
-  s.AppendU8(dlen >> 8);  // data len
-  s.AppendU8(dlen);       // data len
-  s.AppendU8(ts >> 16);   // time stamp
-  s.AppendU8(ts >> 8);    // time stamp
-  s.AppendU8(ts);         // time stamp
-  s.AppendU8(ts >> 24);   // time stamp
-  s.AppendU8(0x00);       // stream id 0
-  s.AppendU8(0x00);       // stream id 0
-  s.AppendU8(0x00);       // stream id 0
-  s.AppendLeU32(uint32_t(buf_.Len()));
+  libyte::Slice s(buf_.Bytes());
+  s.Offset(offset_-11);
+  s.PutU8(tag);
+  s.PutU8(dlen >> 16); // data len
+  s.PutU8(dlen >> 8);  // data len
+  s.PutU8(dlen);       // data len
+  s.PutU8(ts >> 16);   // time stamp
+  s.PutU8(ts >> 8);    // time stamp
+  s.PutU8(ts);         // time stamp
+  s.PutU8(ts >> 24);   // time stamp
+  s.PutU8(0x00);       // stream id 0
+  s.PutU8(0x00);       // stream id 0
+  s.PutU8(0x00);       // stream id 0
+  s.PutLeU32(uint32_t(buf_.Len()));
   return s;
 }
 } // namespace libflv

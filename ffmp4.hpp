@@ -29,10 +29,10 @@ public:
 
   void Close() {
     if (pOfmtCtx_) {
-      if (firstFrameTs_ > 0) {
-        av_write_trailer(pOfmtCtx_);
+      av_write_trailer(pOfmtCtx_);
+      if (pOfmtCtx_->pb) {
+        avio_closep(&pOfmtCtx_->pb);
       }
-      avio_closep(&pOfmtCtx_->pb);
       avformat_free_context(pOfmtCtx_);
       pOfmtCtx_ = nullptr;
     }
@@ -57,7 +57,7 @@ public:
       return;
     }
     // 关键帧
-    if (ftype == 3) {
+    if (ftype == 3 && faac_) {
       frame = faac_->Encode(frame, len, len);
     }
     if (len == 0) {
