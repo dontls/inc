@@ -25,18 +25,21 @@ inline int read264frame(char *b, int len) {
   }
   return offset;
 }
-namespace libfile {
+namespace libframe {
 
-class Frame {
+class File {
 private:
   char *data_;
   FILE *file_;
 
 public:
-  Frame(/* args */) : file_(NULL) { data_ = new char[READ_BUF_SIZ]; }
-  ~Frame() {
+  File(/* args */) : file_(NULL) { data_ = new char[READ_BUF_SIZ]; }
+  ~File() {
     if (data_) {
       delete data_;
+    }
+    if(file_) {
+      fclose(file_);
     }
   }
 
@@ -69,4 +72,4 @@ public:
     return data_;
   }
 };
-} // namespace libfile
+} // namespace libframe

@@ -1,14 +1,22 @@
-#include "../time.hpp"
+#include "time.hpp"
 #include <stdio.h>
 
+namespace libtime {
+static const char *DateOnly = "%Y-%m-%d";
+}
+
 int main(int argc, char const *argv[]) {
+  auto tzoff = libtime::TZOffset();
   std::string ntime = libtime::Format();
   std::time_t ts = libtime::Format2Unix(ntime.c_str());
-  printf("%s %ld\n", ntime.c_str(), ts);
+  printf("%s %ld %lld\n", ntime.c_str(), ts, tzoff);
   long long startTime = libtime::UnixMilli();
   if (libtime::Since(startTime) > 90) {
     printf("%lld\n", startTime);
   }
+  ntime = libtime::Format(startTime, libtime::DateOnly);
+  ts = libtime::Format2Unix(ntime.c_str(), libtime::DateOnly);
+  printf("%s %ld\n", ntime.c_str(), ts);
   sleep(2);
   if (libtime::Since(startTime) > 5000) {
     printf("5s超时\n");

@@ -1,10 +1,10 @@
-#include "../rtmp.hpp"
-#include "../time.hpp"
-#include "framefile.hpp"
+#include "stream/rtmp.hpp"
+#include "stream/frame.hpp"
+#include "time.hpp"
 // 0x67 0x68 0x65 0x41
 
 int main(int argc, char const *argv[]) {
-  FrameFile ffile;
+  libframe::File ffile;
   bool ok = ffile.Open("1080p.h264");
   if (!ok) {
     return -1;
@@ -19,7 +19,7 @@ int main(int argc, char const *argv[]) {
       ffile.Open("1080p.h264");
       continue;
     }
-    cli.WriteVideo(b, len, ftype, ts);
+    cli.WriteFrame(b, len, ftype, ts);
     ts += 40;
     libtime::Sleep(40);
   }

@@ -622,7 +622,7 @@ inline void Trak::AppendSample(int64_t ts, u32 &offset, u32 length, bool bKey) {
   value[0].emplace_back(HTOBE32(length)); // stsz
   value[1].emplace_back(HTOBE32(offset)); // stco
   if (bKey) {
-    value[2].emplace_back(HTOBE32(value[0].size())); // stco
+    value[2].emplace_back(HTOBE32(value[0].size())); // stss
   }
   offset += length;
 }

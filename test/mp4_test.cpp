@@ -1,30 +1,25 @@
-#include "../rtsp.hpp"
-#include "../mp4.hpp"
-#include "../fmp4.hpp"
-#include "../faac.hpp"
-#include "../g711.h"
-#include "framefile.hpp"
-#include "../mp4.hpp"
-#include "../minimp4.hpp"
+#include "stream/rtsp.hpp"
+#include "stream/mp4.hpp"
+#include "stream/fmp4.hpp"
+#include "stream/g711.h"
+#include "stream/minimp4.hpp"
 
 int test1(int argc, char const *argv[]) {
-  libfile::Mp4 file("00rtsp.mp4");
+  libfile::FMp4 file("00rtsp.mp4");
   try {
-    uint16_t pcm[1024] = {};
-    libfaac::Encoder faac(8000, 1, 16, libfaac::STREAM_RAW);
     librtsp::Client cli(true);
     auto firts = libtime::UnixMilli();
-    cli.Play("rtsp://admin:12345@172.16.50.219:554/test.mp4",
+    cli.Play("rtsp://172.16.50.219:8554/live_20198002_3_0",
              [&](const char *format, uint8_t ftype, char *data, size_t len) {
                auto ts = libtime::UnixMilli();
                printf("%s %lld type %d size %lu\n", format, ts, ftype, len);
-               if (ftype == 3) {
-                 for (size_t i = 0; i < len; i++) {
-                   pcm[i] = ulaw_to_linear(data[i]);
-                 }
-                 len *= 2;
-                 data = faac.Encode((char *)pcm, len, len);
-               }
+              //  if (ftype == 3) {
+              //    for (size_t i = 0; i < len; i++) {
+              //      pcm[i] = ulaw_to_linear(data[i]);
+              //    }
+              //    len *= 2;
+              //    data = faac.Encode((char *)pcm, len, len);
+              //  }
                if (len > 0) {
                  file.WriteFrame(ts, ftype, data, len);
                }
@@ -42,7 +37,7 @@ static int write_callback(int64_t offset, const void *buffer, size_t size,
   fseek(f, offset, SEEK_SET);
   return fwrite(buffer, 1, size, f) != size;
 }
-
+#if 0
 int test2(int argc, char const *argv[]) {
   libfile::Mp4 file("00rtsp.mp4");
   mp4_h26x_writer_t mp4wr;
@@ -127,8 +122,9 @@ int test3(int argc, char const *argv[]) {
   }
   return 0;
 }
+#endif
 
 int main(int argc, char const *argv[]) {
-  // test1(argc, argv);
-  test2(argc, argv);
+  test1(argc, argv);
+  // test2(argc, argv);
 }
