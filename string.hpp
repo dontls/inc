@@ -7,39 +7,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <cstdarg>
 
-namespace libstr {
-
-class Fmt {
-private:
-  /* data */
-public:
-  template <typename T> Fmt(const char *fmt, T v);
-  const char *c_str() const { return buf_; }
-
-  int length() const { return length_; }
-
-private:
-  char buf_[32] = {};
-  int length_ = 0;
-};
-
-template <typename T> Fmt::Fmt(const char *fmt, T v) {
-  length_ = snprintf(buf_, sizeof(buf_), fmt, v);
-  assert(static_cast<size_t>(length_) < sizeof(buf_));
-}
-
-template Fmt::Fmt(const char *fmt, char);
-template Fmt::Fmt(const char *fmt, short);
-template Fmt::Fmt(const char *fmt, unsigned short);
-template Fmt::Fmt(const char *fmt, int);
-template Fmt::Fmt(const char *fmt, unsigned int);
-template Fmt::Fmt(const char *fmt, long);
-template Fmt::Fmt(const char *fmt, unsigned long);
-template Fmt::Fmt(const char *fmt, long long);
-template Fmt::Fmt(const char *fmt, unsigned long long);
-template Fmt::Fmt(const char *fmt, float);
-template Fmt::Fmt(const char *fmt, double);
+namespace libstring {
 
 typedef std::vector<std::string> Strings;
 
@@ -69,6 +39,27 @@ inline uint32_t Split2Bit(const char *str, const char flag) {
   }
   return ret;
 }
-} // namespace libstr
+
+// 参考golang实现
+inline std::string Sprintf(const char *fmt, ...) {
+  char buffer[1024];
+  va_list args;
+  va_start(args, fmt);
+  int n = vsnprintf(buffer, sizeof(buffer), fmt, args);
+  va_end(args);
+  if (n < 0) {
+    return "";
+  }
+  if (static_cast<size_t>(n) >= sizeof(buffer)) {
+    std::string s(n + 1, '\0');
+    va_start(args, fmt);
+    vsnprintf(&s[0], s.size(), fmt, args);
+    va_end(args);
+    return s;
+  }
+  return std::string(buffer, n);
+}
+
+} // namespace libstring
 
 #endif
