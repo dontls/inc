@@ -25,7 +25,7 @@ int main() {
     std::string msg = libstring::Sprintf(playDVR, self->Id());
     self->Send(msg);
   });
-  ctx->OnMessage = ([&](libtcp::ConnPtr, libyte::Buffer &b) -> int {
+  ctx->OnMessage = ([&](libtcp::ClientPtr, libyte::Buffer &b) -> int {
     if (b.Len() < 32) {
       return 0;
     }

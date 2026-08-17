@@ -57,7 +57,8 @@ using ClientCloseHandler =
 //   0   : 数据不足，等待更多数据；
 //   < 0 : 关闭该连接。
 // ========================================================================
-using MsgHandler = std::function<int(ConnPtr conn, libyte::Buffer &buf)>;
+using ConnMsgHandler = std::function<int(ConnPtr conn, libyte::Buffer &buf)>;
+using ClientMsgHandler = std::function<int(ClientPtr, libyte::Buffer &)>;
 
 // ========================================================================
 // Context : 封装 asio::io_context。
@@ -118,14 +119,14 @@ public:
   }
 
   // 创建客户端并发起连接（便捷方法，阻塞式同步连接）
-  ClientPtr Dial(const char *host, uint16_t port, int id);
+  ClientPtr Dial(const char *host, uint16_t port, int id = 0);
 
   // 创建并启动服务器（便捷方法）
   ServerPtr Listen(uint16_t port);
 
   // 全局默认回调，Dial/Listen 创建的客户端/服务端会自动继承
   ClientConnectHandler OnConnect = nullptr;
-  MsgHandler OnMessage = nullptr;
+  ClientMsgHandler OnMessage = nullptr;
   ClientCloseHandler OnClose = nullptr;
 
 private:
@@ -152,7 +153,7 @@ private:
 };
 
 // 连接关闭回调
-using CloseHandler = std::function<void(ConnPtr, const std::error_code &)>;
+using ConnCloseHandler = std::function<void(ConnPtr)>;
 
 // ========================================================================
 // Conn : 一条已建立的 TCP 连接（会话）。
@@ -197,10 +198,10 @@ public:
   bool IsOpen() const { return sock_.is_open(); }
 
   // 设置消息处理器
-  void SetMessageHandler(MsgHandler h) { handler_ = std::move(h); }
+  void SetMessageHandler(ConnMsgHandler h) { handler_ = std::move(h); }
 
   // 设置连接关闭回调
-  void SetCloseHandler(CloseHandler h) { on_close_ = std::move(h); }
+  void SetCloseHandler(ConnCloseHandler h) { on_close_ = std::move(h); }
 
   // 启动异步读取循环（最多调用一次）
   void Start() {
@@ -215,6 +216,7 @@ public:
   }
 
   // 发送数据（线程安全，可在任意线程调用）
+  void Send(const char *data, size_t len) { Send(std::string(data, len)); }
   void Send(const std::string &msg) {
     auto self = shared_from_this();
     // C++11 has no init-capture; keep the moved payload alive through Post().
@@ -304,7 +306,7 @@ private:
     }
     close_now();
     if (on_close_) {
-      on_close_(shared_from_this(), ec);
+      on_close_(shared_from_this());
     }
   }
 
@@ -329,8 +331,8 @@ private:
   bool writing_ = false;
   bool closed_ = false;
   bool started_ = false;
-  MsgHandler handler_;
-  CloseHandler on_close_;
+  ConnMsgHandler handler_;
+  ConnCloseHandler on_close_;
 };
 
 // ========================================================================
@@ -372,9 +374,9 @@ public:
     on_accept_ = std::move(h);
   }
   // 默认消息回调，作用于每个新连接
-  void OnMessage(MsgHandler h) { on_msg_ = std::move(h); }
+  void OnMessage(ConnMsgHandler h) { on_msg_ = std::move(h); }
   // 连接关闭回调
-  void OnClose(CloseHandler h) { on_close_ = std::move(h); }
+  void OnClose(ConnCloseHandler h) { on_close_ = std::move(h); }
 
 private:
   void do_accept() {
@@ -399,8 +401,8 @@ private:
   ContextPtr ctx_;
   tcp::acceptor acceptor_;
   std::function<void(ConnPtr)> on_accept_;
-  MsgHandler on_msg_;
-  CloseHandler on_close_;
+  ConnMsgHandler on_msg_;
+  ConnCloseHandler on_close_;
 };
 
 inline bool Server::Listen(uint16_t port, const std::string &host) {
@@ -453,6 +455,8 @@ public:
   Client &operator=(const Client &) = delete;
 
   bool ConnectSync(const char *host, uint16_t port);
+  void Connect(const char *host, uint16_t port) { ConnectSync(host, port); }
+  void Reconnect(int) { if (!connected_ && !host_.empty()) Connect(host_.c_str(), port_); }
 
   void Send(const char *data, size_t len) { Send(std::string(data, len)); }
   void Send(const std::string &s) {
@@ -475,7 +479,7 @@ public:
   int Id() const { return id_; }
 
   void OnConnect(ClientConnectHandler h) { on_connect_ = std::move(h); }
-  void OnMessage(MsgHandler h) { on_msg_ = std::move(h); }
+  void OnMessage(ClientMsgHandler h) { on_msg_ = std::move(h); }
   void OnClose(ClientCloseHandler h) { on_close_ = std::move(h); }
 
 private:
@@ -486,12 +490,16 @@ private:
   ConnPtr conn_;
   bool connected_ = false;
   bool manual_close_ = false;
+  std::string host_;
+  uint16_t port_ = 0;
   ClientConnectHandler on_connect_;
-  MsgHandler on_msg_;
+  ClientMsgHandler on_msg_;
   ClientCloseHandler on_close_;
 };
 
 inline bool Client::ConnectSync(const char *host, uint16_t port) {
+  host_ = host;
+  port_ = port;
   manual_close_ = false;
   std::error_code ec;
   tcp::resolver resolver(ctx_->Io());
@@ -506,9 +514,11 @@ inline bool Client::ConnectSync(const char *host, uint16_t port) {
     return false;
   }
   conn_ = std::make_shared<Conn>(ctx_, std::move(sock));
-  conn_->SetMessageHandler(on_msg_);
+  conn_->SetMessageHandler([this](ConnPtr c, libyte::Buffer &b) {
+    return on_msg_ ? on_msg_(shared_from_this(), b) : 0;
+  });
   std::weak_ptr<Client> weak = shared_from_this();
-  conn_->SetCloseHandler([weak](ConnPtr, const std::error_code &e) {
+  conn_->SetCloseHandler([weak](ConnPtr) {
     auto client = weak.lock();
     if (!client) {
       return;
@@ -517,7 +527,7 @@ inline bool Client::ConnectSync(const char *host, uint16_t port) {
     client->connected_ = false;
     client->conn_.reset();
     if (!mc && client->on_close_) {
-      client->on_close_(client, e);
+      client->on_close_(client, std::make_error_code(std::errc::connection_reset));
     }
   });
   conn_->Start();

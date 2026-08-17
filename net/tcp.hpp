@@ -54,9 +54,12 @@ using ClientPtr = std::shared_ptr<Client>;
 // 错误代码
 enum class ErrorCode { Success = 0, Closed = 1, ConnectFailed = 2 };
 
-// 回调类型
-using MsgHandler = std::function<int(ConnPtr, libyte::Buffer &)>;
+// Conn回调
+using ConnMsgHandler = std::function<int(ConnPtr, libyte::Buffer &)>;
 using ConnCloseHandler = std::function<void(ConnPtr)>;
+
+// 客户端回调类型
+using ClientMsgHandler = std::function<int(ClientPtr, libyte::Buffer &)>;
 using ClientConnectHandler = std::function<void(ClientPtr)>;
 using ClientCloseHandler =
     std::function<void(ClientPtr, const std::error_code &)>;
@@ -103,7 +106,7 @@ public:
 
   // 全局默认回调
   ClientConnectHandler OnConnect;
-  MsgHandler OnMessage;
+  ClientMsgHandler OnMessage;
   ClientCloseHandler OnClose;
 
 private:
@@ -224,7 +227,7 @@ public:
   std::string Local() const { return SockName(fd_, false); }
   bool IsOpen() const { return fd_ >= 0 && !closed_; }
 
-  void SetMessageHandler(MsgHandler h) { handler_ = std::move(h); }
+  void SetMessageHandler(ConnMsgHandler h) { handler_ = std::move(h); }
   void SetCloseHandler(ConnCloseHandler h) { on_close_ = std::move(h); }
 
   void Start() {
@@ -341,7 +344,7 @@ private:
   libyte::Buffer outbox_;
   bool closed_ = false;
   bool started_ = false;
-  MsgHandler handler_;
+  ConnMsgHandler handler_;
   ConnCloseHandler on_close_;
 };
 
@@ -389,7 +392,7 @@ public:
   }
 
   void OnAccept(std::function<void(ConnPtr)> h) { on_accept_ = std::move(h); }
-  void OnMessage(MsgHandler h) { on_msg_ = std::move(h); }
+  void OnMessage(ConnMsgHandler h) { on_msg_ = std::move(h); }
   void OnClose(ConnCloseHandler h) { on_close_ = std::move(h); }
 
 private:
@@ -418,7 +421,7 @@ private:
   int listen_fd_ = -1;
   bool started_ = false;
   std::function<void(ConnPtr)> on_accept_;
-  MsgHandler on_msg_;
+  ConnMsgHandler on_msg_;
   ConnCloseHandler on_close_;
 };
 
@@ -471,15 +474,14 @@ public:
 
   void Connect(const char *host, uint16_t port);
 
+  // 通常在 OnClose 回调中调用。
+  void Reconnect(int interval_ms);
+
   void Send(const char *data, size_t len) {
     if (conn_)
       conn_->Send(data, len);
   }
   void Send(const std::string &s) { Send(s.data(), s.size()); }
-
-  // 在连接关闭后发起重连（毫秒，<=0 表示取消重连）。
-  // 通常在 OnClose 回调中调用。
-  void Reconnect(int interval_ms);
 
   void Close() {
     manual_close_ = true;
@@ -502,7 +504,7 @@ public:
   int Id() const { return id_; }
 
   void OnConnect(ClientConnectHandler h) { on_connect_ = std::move(h); }
-  void OnMessage(MsgHandler h) { on_msg_ = std::move(h); }
+  void OnMessage(ClientMsgHandler h) { on_msg_ = std::move(h); }
   void OnClose(ClientCloseHandler h) { on_close_ = std::move(h); }
 
 private:
@@ -518,7 +520,7 @@ private:
   }
 
   void schedule_reconnect(int reconnect_ms_) {
-    if (manual_close_ || connecting_)
+    if (manual_close_ || connected_ || connecting_ || timerfd_ >= 0)
       return;
     connecting_ = true;
     timerfd_ = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
@@ -545,9 +547,9 @@ private:
       addr_idx_ = 0;
       try_connect_next();
     } else {
-      std::thread([this]() {
-        auto self = shared_from_this();
-        do_resolve_and_connect(host_.c_str(), port_);
+      auto self = shared_from_this();
+      std::thread([self]() {
+        self->do_resolve_and_connect(self->host_.c_str(), self->port_);
       }).detach();
     }
   }
@@ -608,7 +610,7 @@ private:
   size_t addr_idx_ = 0;
   int connect_fd_ = -1;
   ClientConnectHandler on_connect_;
-  MsgHandler on_msg_;
+  ClientMsgHandler on_msg_;
   ClientCloseHandler on_close_;
 };
 
@@ -754,9 +756,14 @@ inline void Client::on_connect_done(int fd) {
 
   connecting_ = false;
   conn_ = std::make_shared<Conn>(ctx, fd);
-  conn_->SetMessageHandler(on_msg_);
-
   std::weak_ptr<Client> weak = shared_from_this();
+  conn_->SetMessageHandler([weak](ConnPtr, libyte::Buffer &buffer) {
+    auto client = weak.lock();
+    if (!client || !client->on_msg_)
+      return 0;
+    return client->on_msg_(client, buffer);
+  });
+
   conn_->SetCloseHandler([weak](ConnPtr) {
     auto client = weak.lock();
     if (!client)
