@@ -9,6 +9,7 @@
 
 // 使用推荐的新式 asio API（同步操作返回 void 而非被标记 nodiscard 的
 // error_code）
+#include <cstddef>
 #define ASIO_NO_DEPRECATED
 
 #include <asio.hpp>
@@ -43,22 +44,22 @@ class Client;
 using ClientPtr = std::shared_ptr<Client>;
 
 // ========================================================================
-// 客户端连接成功回调
-// ========================================================================
-using ClientConnectHandler = std::function<void(ClientPtr)>;
-// 客户端连接关闭 / 失败回调
-using ClientCloseHandler =
-    std::function<void(ClientPtr, const std::error_code &)>;
-
-// ========================================================================
 // 消息处理器：在事件循环线程中调用，conn 为触发该回调的连接。
 // 从缓冲区消费数据，返回本次消费的字节数：
 //   > 0 : 消费 n 字节，循环继续解析下一条消息；
 //   0   : 数据不足，等待更多数据；
 //   < 0 : 关闭该连接。
 // ========================================================================
-using ConnMsgHandler = std::function<int(ConnPtr conn, libyte::Buffer &buf)>;
-using ClientMsgHandler = std::function<int(ClientPtr, libyte::Buffer &)>;
+using ConnMsgHandler = std::function<int(ConnPtr, char *, size_t n)>;
+
+// ========================================================================
+// 客户端连接成功回调
+// ========================================================================
+using ClientConnectHandler = std::function<void(ClientPtr)>;
+// 客户端连接关闭 / 失败回调
+using ClientCloseHandler =
+    std::function<void(ClientPtr, const std::error_code &)>;
+using ClientMsgHandler = std::function<int(ClientPtr, char *, size_t n)>;
 
 // ========================================================================
 // Context : 封装 asio::io_context。
@@ -250,20 +251,17 @@ private:
                 return;
               }
               rbuf_.Write(buf_, n);
-              if (handler_) {
-                for (;;) {
-                  int consumed = handler_(shared_from_this(), rbuf_);
-                  if (consumed < 0) {
-                    handle_close(ec);
-                    return;
-                  }
-                  if (consumed == 0) {
-                    break;
-                  }
-                  rbuf_.Remove((size_t)consumed);
+              for (;;) {
+                int consumed =
+                    handler_(shared_from_this(), rbuf_.Bytes(), rbuf_.Len());
+                if (consumed < 0) {
+                  handle_close(ec);
+                  return;
                 }
-              } else {
-                rbuf_.Reset();
+                if (consumed == 0) {
+                  break;
+                }
+                rbuf_.Remove((size_t)consumed);
               }
               do_read();
             }));
@@ -370,9 +368,7 @@ public:
   }
 
   // 新连接回调（可在其中定制该连接的处理器）
-  void OnAccept(std::function<void(ConnPtr)> h) {
-    on_accept_ = std::move(h);
-  }
+  void OnAccept(std::function<void(ConnPtr)> h) { on_accept_ = std::move(h); }
   // 默认消息回调，作用于每个新连接
   void OnMessage(ConnMsgHandler h) { on_msg_ = std::move(h); }
   // 连接关闭回调
@@ -456,7 +452,10 @@ public:
 
   bool ConnectSync(const char *host, uint16_t port);
   void Connect(const char *host, uint16_t port) { ConnectSync(host, port); }
-  void Reconnect(int) { if (!connected_ && !host_.empty()) Connect(host_.c_str(), port_); }
+  void Reconnect(int) {
+    if (!connected_ && !host_.empty())
+      Connect(host_.c_str(), port_);
+  }
 
   void Send(const char *data, size_t len) { Send(std::string(data, len)); }
   void Send(const std::string &s) {
@@ -514,8 +513,8 @@ inline bool Client::ConnectSync(const char *host, uint16_t port) {
     return false;
   }
   conn_ = std::make_shared<Conn>(ctx_, std::move(sock));
-  conn_->SetMessageHandler([this](ConnPtr c, libyte::Buffer &b) {
-    return on_msg_ ? on_msg_(shared_from_this(), b) : 0;
+  conn_->SetMessageHandler([this](ConnPtr c, char *data, size_t n) {
+    return on_msg_ ? on_msg_(shared_from_this(), data, n) : n;
   });
   std::weak_ptr<Client> weak = shared_from_this();
   conn_->SetCloseHandler([weak](ConnPtr) {
@@ -527,7 +526,8 @@ inline bool Client::ConnectSync(const char *host, uint16_t port) {
     client->connected_ = false;
     client->conn_.reset();
     if (!mc && client->on_close_) {
-      client->on_close_(client, std::make_error_code(std::errc::connection_reset));
+      client->on_close_(client,
+                        std::make_error_code(std::errc::connection_reset));
     }
   });
   conn_->Start();
@@ -545,16 +545,16 @@ inline ClientPtr Context::Dial(const char *host, uint16_t port, int id) {
   c->OnMessage(this->OnMessage);
   ClientCloseHandler user_close = this->OnClose;
   std::weak_ptr<Context> weak_ctx = shared_from_this();
-  c->OnClose([weak_ctx, user_close, id](ClientPtr client,
-                                        const std::error_code &ec) {
-    if (user_close) {
-      user_close(client, ec);
-    }
-    auto ctx = weak_ctx.lock();
-    if (ctx) {
-      ctx->ReleaseClient(id);
-    }
-  });
+  c->OnClose(
+      [weak_ctx, user_close, id](ClientPtr client, const std::error_code &ec) {
+        if (user_close) {
+          user_close(client, ec);
+        }
+        auto ctx = weak_ctx.lock();
+        if (ctx) {
+          ctx->ReleaseClient(id);
+        }
+      });
   if (!c->ConnectSync(host, port)) {
     ReleaseClient(id);
   }
@@ -569,4 +569,4 @@ inline ServerPtr Context::Listen(uint16_t port) {
   return s;
 }
 
-} // namespace libnet
+} // namespace libtcp

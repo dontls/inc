@@ -4,6 +4,7 @@
 #include "time.hpp"
 #include "crypto/base64.h"
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <sstream>
@@ -317,7 +318,7 @@ public:
   }
   ~Client() { Close(); }
   // 转发rtp包代理
-  std::function<void(uint8_t *, int)> OnRTPAnyPacket;
+  std::function<void(uint8_t *, size_t)> OnRTPAnyPacket;
   // 解析帧
   using OnFrame = std::function<int(const char *, uint8_t, char *, size_t)>;
 
@@ -330,7 +331,7 @@ public:
     doWriteCmd(OPTIONS, seq_++, "");
     long long ts = libtime::UnixMilli();
     this->LoopRead(
-        [&](char *data, int len) {
+        [&](char *data, size_t len) {
           if (len < 4) {
             return 0;
           }
@@ -340,7 +341,7 @@ public:
             return doRtspParse(data, len);
           }
           uint8_t ch = b[1];
-          int dlen = Uint16(&b[2]) + 4;
+          size_t dlen = size_t(Uint16(&b[2])) + 4;
           if (len < dlen) {
             return 0;
           }
@@ -372,7 +373,7 @@ public:
             ts = libtime::UnixMilli();
             this->doKeepalive(rtp);
           }
-          return dlen;
+          return int(dlen);
         },
         1000);
     return true;
@@ -421,14 +422,14 @@ private:
     return false;
   }
 
-  int doRtspParse(char *b, int len) {
+  int doRtspParse(char *b, size_t len) {
     char *h0 = strstr(b, "\r\n\r\n");
     if (h0 == nullptr) {
       return 0;
     }
     int hlen = int(h0 - b) + 4;
     std::string hs(b, hlen);
-    int dlen = std::atoi(findVar(hs, "Content-Length: ", "\r\n").c_str());
+    size_t dlen = std::atoi(findVar(hs, "Content-Length: ", "\r\n").c_str());
     if (dlen + hlen > len) {
       return 0;
     }

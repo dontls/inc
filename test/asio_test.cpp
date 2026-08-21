@@ -25,13 +25,13 @@ int main() {
     std::string msg = libstring::Sprintf(playDVR, self->Id());
     self->Send(msg);
   });
-  ctx->OnMessage = ([&](libtcp::ClientPtr, libyte::Buffer &b) -> int {
-    if (b.Len() < 32) {
+  ctx->OnMessage = ([&](libtcp::ClientPtr, char *data, size_t n) -> int {
+    if (n < 32) {
       return 0;
     }
-    DVRHeader *h = (DVRHeader *)(b.Bytes() + 8);
+    DVRHeader *h = (DVRHeader *)(data + 8);
     int dlen = h->nLength + 32;
-    if (b.Len() < dlen) {
+    if (n < dlen) {
       return 0;
     }
     if (h->nType == 1) {
@@ -42,6 +42,7 @@ int main() {
   });
   ctx->OnClose = ([](libtcp::ClientPtr self, const std::error_code &ec) {
     printf("client closed: %s\n", ec.message().c_str());
+    self->Reconnect(1000);
   });
   ctx->RunAsync(); // 事件循环在独立线程中运行
   // Keep the client alive; TcpClient owns the connection and its destructor

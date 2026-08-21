@@ -6,6 +6,7 @@
 // ========================================================================
 //  Include Files
 // ========================================================================
+#include <cstddef>
 #ifdef _WIN32 // windows 95 and above
 #include "Ws2tcpip.h"
 #include "windows.h" // almost everything is contained in one file.
@@ -602,7 +603,7 @@ public:
   // Function:    LoopRead
   // Purpose:     LoopRead with protocol handler, return protocol length
   // ====================================================================
-  void LoopRead(std::function<int(char *, int)> handler, int timeout = 0);
+  void LoopRead(std::function<int(char *, size_t)> handler, int timeout = 0);
 
 protected:
   bool m_connected; // is the socket connected?
@@ -769,7 +770,7 @@ inline void TcpConn::Close() {
 // Function:    LoopRead
 // Purpose:     LoopRead with protocol handler
 // ====================================================================
-inline void TcpConn::LoopRead(std::function<int(char *, int)> handler,
+inline void TcpConn::LoopRead(std::function<int(char *, size_t)> handler,
                               int timeout) {
   libyte::Buffer rbuf;
   for (;;) {

@@ -3,6 +3,7 @@
 //   g++ -I../ -g tcp_test.cpp -o tcp_test -pthread
 #include "net/tcp.hpp"
 #include "string.hpp"
+#include <cstddef>
 #include <cstdio>
 #include <string>
 
@@ -19,23 +20,9 @@ int test_server() {
   if (s == nullptr) {
     return -1;
   }
-  s->OnAccept([=](libtcp::ConnPtr) {
-
-  });
-  s->OnMessage([=](libtcp::ConnPtr, libyte::Buffer &b) -> int {
-    if (b.Len() < 32) {
-      return 0;
-    }
-    DVRHeader *h = (DVRHeader *)(b.Bytes() + 8);
-    int dlen = h->nLength + 32;
-    if (b.Len() < dlen) {
-      return 0;
-    }
-    if (h->nType == 1) {
-      printf("%lld channel %d type %d length %d\n", h->lFrameTimeStamp,
-             h->nChannel, h->nType, h->nLength);
-    }
-    return dlen;
+  s->OnAccept([=](libtcp::ConnPtr) {});
+  s->OnMessage([=](libtcp::ConnPtr conn, char *data, size_t n) -> int {
+    return int(n);
   });
   s->OnClose([=](libtcp::ConnPtr) {
 
@@ -57,13 +44,13 @@ int main() {
     std::string msg = libstring::Sprintf(playDVR, self->Id() + 1);
     self->Send(msg);
   });
-  ctx->OnMessage = ([&](libtcp::ClientPtr, libyte::Buffer &b) -> int {
-    if (b.Len() < 32) {
+  ctx->OnMessage = ([&](libtcp::ClientPtr, char *data, size_t n) -> int {
+    if (n < 32) {
       return 0;
     }
-    DVRHeader *h = (DVRHeader *)(b.Bytes() + 8);
+    DVRHeader *h = (DVRHeader *)(data + 8);
     int dlen = h->nLength + 32;
-    if (b.Len() < dlen) {
+    if (n < dlen) {
       return 0;
     }
     if (h->nType == 1) {

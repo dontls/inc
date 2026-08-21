@@ -7,6 +7,7 @@
 #include "../log.hpp"
 
 #include <arpa/inet.h>
+#include <cstddef>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -55,11 +56,11 @@ using ClientPtr = std::shared_ptr<Client>;
 enum class ErrorCode { Success = 0, Closed = 1, ConnectFailed = 2 };
 
 // Conn回调
-using ConnMsgHandler = std::function<int(ConnPtr, libyte::Buffer &)>;
+using ConnMsgHandler = std::function<int(ConnPtr, char *, size_t n)>;
 using ConnCloseHandler = std::function<void(ConnPtr)>;
 
 // 客户端回调类型
-using ClientMsgHandler = std::function<int(ClientPtr, libyte::Buffer &)>;
+using ClientMsgHandler = std::function<int(ClientPtr, char *, size_t n)>;
 using ClientConnectHandler = std::function<void(ClientPtr)>;
 using ClientCloseHandler =
     std::function<void(ClientPtr, const std::error_code &)>;
@@ -283,25 +284,15 @@ private:
   }
 
   bool DispatchMessages() {
-    if (!handler_) {
-      rbuf_.Reset();
-      return true;
-    }
     for (;;) {
-      const size_t available = rbuf_.Len();
-      const int consumed = handler_(shared_from_this(), rbuf_);
+      const int consumed =
+          handler_(shared_from_this(), rbuf_.Bytes(), rbuf_.Len());
       if (consumed < 0) {
         close_now(true);
         return false;
       }
       if (consumed == 0)
         return true;
-      if (static_cast<size_t>(consumed) > available) {
-        LogError(false, "message handler consumed %d bytes from %zu", consumed,
-                 available);
-        close_now(true);
-        return false;
-      }
       rbuf_.Remove(static_cast<size_t>(consumed));
     }
   }
@@ -757,11 +748,11 @@ inline void Client::on_connect_done(int fd) {
   connecting_ = false;
   conn_ = std::make_shared<Conn>(ctx, fd);
   std::weak_ptr<Client> weak = shared_from_this();
-  conn_->SetMessageHandler([weak](ConnPtr, libyte::Buffer &buffer) {
+  conn_->SetMessageHandler([weak](ConnPtr, char *data, size_t n) {
     auto client = weak.lock();
     if (!client || !client->on_msg_)
       return 0;
-    return client->on_msg_(client, buffer);
+    return client->on_msg_(client, data, n);
   });
 
   conn_->SetCloseHandler([weak](ConnPtr) {
