@@ -751,7 +751,7 @@ inline void Client::on_connect_done(int fd) {
   conn_->SetMessageHandler([weak](ConnPtr, char *data, size_t n) {
     auto client = weak.lock();
     if (!client || !client->on_msg_)
-      return 0;
+      return -1;
     return client->on_msg_(client, data, n);
   });
 

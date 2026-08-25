@@ -514,7 +514,7 @@ inline bool Client::ConnectSync(const char *host, uint16_t port) {
   }
   conn_ = std::make_shared<Conn>(ctx_, std::move(sock));
   conn_->SetMessageHandler([this](ConnPtr c, char *data, size_t n) {
-    return on_msg_ ? on_msg_(shared_from_this(), data, n) : n;
+    return on_msg_ ? on_msg_(shared_from_this(), data, n) : -1;
   });
   std::weak_ptr<Client> weak = shared_from_this();
   conn_->SetCloseHandler([weak](ConnPtr) {
