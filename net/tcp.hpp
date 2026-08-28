@@ -476,7 +476,7 @@ public:
 
   void Close() {
     manual_close_ = true;
-    cancel_timer();
+    CancelTimer();
     if (connect_fd_ >= 0) {
       if (auto ctx = ctx_.lock())
         ctx->DelFd(connect_fd_);
@@ -501,7 +501,7 @@ public:
 private:
   Client(ContextPtr ctx, int id) : ctx_(std::move(ctx)), id_(id) {}
 
-  void cancel_timer() {
+  void CancelTimer() {
     if (timerfd_ >= 0) {
       if (auto ctx = ctx_.lock())
         ctx->DelFd(timerfd_);
@@ -510,7 +510,7 @@ private:
     }
   }
 
-  void schedule_reconnect(int reconnect_ms_) {
+  void ScheduleReconnect(int reconnect_ms_) {
     if (manual_close_ || connected_ || connecting_ || timerfd_ >= 0)
       return;
     connecting_ = true;
@@ -523,30 +523,30 @@ private:
     ::timerfd_settime(timerfd_, 0, &its, nullptr);
     if (auto ctx = ctx_.lock()) {
       auto self = shared_from_this();
-      ctx->AddFd(timerfd_, [self](uint32_t) { self->on_timer(); });
+      ctx->AddFd(timerfd_, [self](uint32_t) { self->OnTimer(); });
     }
   }
 
-  void on_timer() {
+  void OnTimer() {
     connecting_ = false;
-    cancel_timer();
+    CancelTimer();
     if (manual_close_) {
       return;
     }
     // 如果已有解析结果，直接用；否则异步解析
     if (!addrs_.empty()) {
       addr_idx_ = 0;
-      try_connect_next();
+      TryConnectNext();
     } else {
       auto self = shared_from_this();
       std::thread([self]() {
-        self->do_resolve_and_connect(self->host_.c_str(), self->port_);
+        self->DoResolveAndConnect(self->host_.c_str(), self->port_);
       }).detach();
     }
   }
 
   // 在后台线程中执行 DNS 解析和连接
-  void do_resolve_and_connect(const char *host, uint16_t port) {
+  void DoResolveAndConnect(const char *host, uint16_t port) {
     struct addrinfo hints{};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -581,12 +581,12 @@ private:
     // DNS 解析完成，保存结果并回到主线程执行连接
     addrs_ = std::move(new_addrs);
     addr_idx_ = 0;
-    try_connect_next();
+    TryConnectNext();
   }
 
-  void try_connect_next();
-  void on_connect_event(uint32_t);
-  void on_connect_done(int fd);
+  void TryConnectNext();
+  void OnConnectEvent(uint32_t);
+  void OnConnectDone(int fd);
 
   std::weak_ptr<Context> ctx_;
   const int id_;
@@ -614,7 +614,7 @@ inline void Client::Connect(const char *host, uint16_t port) {
   connecting_ = true;
   host_ = host;
   port_ = port;
-  cancel_timer();
+  CancelTimer();
 
   if (connect_fd_ >= 0) {
     ctx->DelFd(connect_fd_);
@@ -625,22 +625,22 @@ inline void Client::Connect(const char *host, uint16_t port) {
   // 检查是否需要重新解析（host/port 改变或首次连接）
   if (addrs_.empty() || addr_idx_ >= addrs_.size()) {
     addr_idx_ = 0;
-    do_resolve_and_connect(host, port);
+    DoResolveAndConnect(host, port);
   } else {
     // 复用已有的地址列表
     addr_idx_ = 0;
-    try_connect_next();
+    TryConnectNext();
   }
 }
 
 inline void Client::Reconnect(int interval_ms) {
   manual_close_ = false;
-  cancel_timer();
+  CancelTimer();
   if (!connected_ && !connecting_)
-    schedule_reconnect(interval_ms);
+    ScheduleReconnect(interval_ms);
 }
 
-inline void Client::try_connect_next() {
+inline void Client::TryConnectNext() {
   auto ctx = ctx_.lock();
   if (!ctx) {
     connecting_ = false;
@@ -680,7 +680,7 @@ inline void Client::try_connect_next() {
     int rc = ::connect(fd, (const struct sockaddr *)&sa, sizeof(sa));
 
     if (rc == 0) {
-      on_connect_done(fd);
+      OnConnectDone(fd);
       return;
     }
 
@@ -688,7 +688,7 @@ inline void Client::try_connect_next() {
       connect_fd_ = fd;
       auto self = shared_from_this();
       ctx->AddFd(
-          fd, [self](uint32_t ev) { self->on_connect_event(ev); }, EPOLLOUT);
+          fd, [self](uint32_t ev) { self->OnConnectEvent(ev); }, EPOLLOUT);
       return;
     }
 
@@ -697,7 +697,7 @@ inline void Client::try_connect_next() {
   }
 }
 
-inline void Client::on_connect_event(uint32_t) {
+inline void Client::OnConnectEvent(uint32_t) {
   auto ctx = ctx_.lock();
   if (!ctx) {
     connecting_ = false;
@@ -724,14 +724,14 @@ inline void Client::on_connect_event(uint32_t) {
   if (err != 0) {
     ::close(fd);
     ++addr_idx_;
-    try_connect_next();
+    TryConnectNext();
     return;
   }
 
-  on_connect_done(fd);
+  OnConnectDone(fd);
 }
 
-inline void Client::on_connect_done(int fd) {
+inline void Client::OnConnectDone(int fd) {
   auto ctx = ctx_.lock();
   if (!ctx) {
     connecting_ = false;
