@@ -4,7 +4,6 @@
 // Server（监听）、Client（客户端连接 + 自动重连）
 
 #include "../buffer.hpp"
-#include "../log.hpp"
 
 #define ASIO_NO_DEPRECATED
 #include <asio.hpp>
@@ -314,7 +313,7 @@ private:
     acceptor_.async_accept([this](const std::error_code &ec, tcp::socket sock) {
       if (ec) {
         if (ec != asio::error::operation_aborted)
-          LogError(true, "accept failed: %s", ec.message().c_str());
+          printf("accept failed: %s\n", ec.message().c_str());
         return;
       }
       auto conn = std::make_shared<Conn>(ctx_, std::move(sock));
@@ -339,30 +338,28 @@ inline bool Server::Listen(uint16_t port, const std::string &host) {
   std::error_code ec;
   asio::ip::address addr = asio::ip::make_address(host, ec);
   if (ec) {
-    LogError(true, "make_address(%s) failed: %s", host.c_str(),
-             ec.message().c_str());
+    printf("make_address(%s) failed: %s\n", host.c_str(), ec.message().c_str());
     return false;
   }
   tcp::endpoint ep(addr, port);
   acceptor_.open(ep.protocol(), ec);
   if (ec) {
-    LogError(true, "acceptor open failed: %s", ec.message().c_str());
+    printf("acceptor open failed: %s\n", ec.message().c_str());
     return false;
   }
   acceptor_.set_option(asio::socket_base::reuse_address(true), ec);
   if (ec) {
-    LogError(true, "set reuse_address failed: %s", ec.message().c_str());
+    printf("set reuse_address failed: %s\n", ec.message().c_str());
     return false;
   }
   acceptor_.bind(ep, ec);
   if (ec) {
-    LogError(true, "bind %s:%u failed: %s", host.c_str(), port,
-             ec.message().c_str());
+    printf("bind %s:%u failed: %s\n", host.c_str(), port, ec.message().c_str());
     return false;
   }
   acceptor_.listen(asio::socket_base::max_listen_connections, ec);
   if (ec) {
-    LogError(true, "listen failed: %s", ec.message().c_str());
+    printf("listen failed: %s\n", ec.message().c_str());
     return false;
   }
   return true;

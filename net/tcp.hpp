@@ -4,10 +4,10 @@
 // Server（监听）、Client（客户端连接 + 自动重连）
 
 #include "../buffer.hpp"
-#include "../log.hpp"
 
 #include <arpa/inet.h>
 #include <cstddef>
+#include <cstdio>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -156,7 +156,7 @@ private:
     ev.events = events;
     ev.data.fd = fd;
     if (::epoll_ctl(epfd_, EPOLL_CTL_ADD, fd, &ev) != 0) {
-      LogError(true, "epoll_ctl ADD fd %d failed: %s", fd, strerror(errno));
+      printf("epoll_ctl ADD fd %d failed: %s\n", fd, strerror(errno));
       return false;
     }
     {
@@ -395,7 +395,7 @@ private:
           continue;
         if (errno == EAGAIN || errno == EWOULDBLOCK)
           break;
-        LogError(true, "accept failed: %s", strerror(errno));
+        printf("accept failed: %s\n", strerror(errno));
         break;
       }
       SetNonBlock(fd);
@@ -419,7 +419,7 @@ private:
 inline bool Server::Listen(uint16_t port, const std::string &host) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
-    LogError(true, "socket failed: %s", strerror(errno));
+    printf("socket failed: %s\n", strerror(errno));
     return false;
   }
 
@@ -436,13 +436,12 @@ inline bool Server::Listen(uint16_t port, const std::string &host) {
 
   SetNonBlock(fd);
   if (::bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-    LogError(true, "bind %s:%u failed: %s", host.c_str(), port,
-             strerror(errno));
+    printf("bind %s:%u failed: %s\n", host.c_str(), port, strerror(errno));
     ::close(fd);
     return false;
   }
   if (::listen(fd, 128) != 0) {
-    LogError(true, "listen failed: %s", strerror(errno));
+    printf("listen failed: %s\n", strerror(errno));
     ::close(fd);
     return false;
   }

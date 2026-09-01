@@ -1,5 +1,19 @@
 #pragma once
 
+#if USE_LIB_SPDLOG
+
+#include "spdlog/spdlog.h"
+#define SPDLOG_WARN2(b, ...)                                                   \
+  SPDLOG_LOGGER_CALL(spdlog::default_logger_raw(),                             \
+                     (b) ? spdlog::level::warn : spdlog::level::debug,         \
+                     __VA_ARGS__)
+
+#define SPDLOG_ERROR2(b, ...)                                                  \
+  SPDLOG_LOGGER_CALL(spdlog::default_logger_raw(),                             \
+                     (b) ? spdlog::level::err : spdlog::level::debug,          \
+                     __VA_ARGS__)
+#else
+
 #include "time.hpp"
 #define FMT_HEADER_ONLY 1
 #include "fmt/base.h"
@@ -68,7 +82,7 @@ public:
   }
 };
 
-static Logger &Default() {
+inline Logger &Default() {
   static Logger logger;
   return logger;
 }
@@ -76,15 +90,23 @@ static Logger &Default() {
 } // namespace liblog
 
 #define SPDLOG_DEBUG(...)                                                      \
-  liblog::Default().Println(liblog::DEBUG, __FILE__, __LINE__, ##__VA_ARGS__)
+  liblog::Default().Println(liblog::DEBUG, __FILE__, __LINE__, __VA_ARGS__)
 
 #define SPDLOG_INFO(...)                                                       \
-  liblog::Default().Println(liblog::INFO, __FILE__, __LINE__, ##__VA_ARGS__)
+  liblog::Default().Println(liblog::INFO, __FILE__, __LINE__, __VA_ARGS__)
 
-#define SPDLOG_WARN(b, ...)                                                    \
+#define SPDLOG_WARN(...)                                                       \
+  liblog::Default().Println(liblog::WARN, __FILE__, __LINE__, __VA_ARGS__)
+
+#define SPDLOG_ERROR(...)                                                      \
+  liblog::Default().Println(liblog::ERR, __FILE__, __LINE__, __VA_ARGS__)
+
+#define SPDLOG_WARN2(b, ...)                                                   \
   liblog::Default().Println((b) ? liblog::WARN : liblog::DEBUG, __FILE__,      \
-                            __LINE__, ##__VA_ARGS__);
+                            __LINE__, ##__VA_ARGS__)
 
-#define SPDLOG_ERROR(b, ...)                                                   \
+#define SPDLOG_ERROR2(b, ...)                                                  \
   liblog::Default().Println((b) ? liblog::ERR : liblog::DEBUG, __FILE__,       \
-                            __LINE__, ##__VA_ARGS__);
+                            __LINE__, ##__VA_ARGS__)
+
+#endif

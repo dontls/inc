@@ -7,8 +7,8 @@ int main(int argc, char const *argv[]) {
   liblog::Default().SetLevel(liblog::DEBUG);
   SPDLOG_DEBUG("{}", 1);
   SPDLOG_INFO("{}", 1);
-  SPDLOG_WARN(1, "{}", 1);
-  SPDLOG_ERROR(1, "{}", 1);
+  SPDLOG_WARN( "{}", 1);
+  SPDLOG_ERROR("{}", 1);
   fclose(file);
   return 0;
 }
