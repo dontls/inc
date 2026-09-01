@@ -1,13 +1,14 @@
 #include "../log.hpp"
 
+
 int main(int argc, char const *argv[]) {
-  FILE *file = fopen("./log.txt", "w+");
-  liblog::Logger::Instance().SetOutput(file);
-  liblog::Level = liblog::DEBUG;
-  LogDebug("%d", 1);
-  LogInfo("%d %lld", 1, 1124555);
-  LogWarn(true, "%d", 1);
-  LogError(true, "%d", 1);
+  FILE *file = fopen("./log-rotating.txt", "a+");
+  liblog::Default().SetOutput(file);
+  liblog::Default().SetLevel(liblog::DEBUG);
+  SPDLOG_DEBUG("{}", 1);
+  SPDLOG_INFO("{}", 1);
+  SPDLOG_WARN(1, "{}", 1);
+  SPDLOG_ERROR(1, "{}", 1);
   fclose(file);
   return 0;
 }

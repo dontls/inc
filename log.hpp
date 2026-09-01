@@ -1,5 +1,8 @@
 #pragma once
 
+#include "time.hpp"
+#define FMT_HEADER_ONLY 1
+#include "fmt/base.h"
 #ifdef _WIN32
 #include <cstdarg>
 #else
@@ -9,14 +12,6 @@
 #include <cstdio>
 #include <mutex>
 
-#ifndef LOG_USE_TIME_LINE
-#define LOG_USE_TIME_LINE 1
-#endif
-
-#if LOG_USE_TIME_LINE
-#include "time.hpp"
-#endif
-
 namespace liblog {
 enum level {
   DEBUG, //
@@ -25,35 +20,24 @@ enum level {
   ERR    //
 };
 
-static const char *_levelout[] = {
-    " DEBUG",                      //
-    "\x1b[32m  INFO\x1b[0m",  //
-    "\x1b[33m  WARN\x1b[0m",  //
-    "\x1b[31m ERROR\x1b[0m", //
+static const char *_level_text[] = {
+    "DEBUG", //
+    " INFO", //
+    " WARN", //
+    "ERROR", //
 };
-
-static int Level = DEBUG;
+static const char *_level_text_color[] = {
+    "DEBUG",                //
+    "\x1b[32m INFO\x1b[0m", //
+    "\x1b[33m WARN\x1b[0m", //
+    "\x1b[31mERROR\x1b[0m", //
+};
 
 class Logger {
 private:
-  FILE *file_;
+  int level_ = INFO;
+  FILE *file_ = nullptr;
   std::mutex mtx_;
-
-  // template <typename... T>
-  // void foutput(FILE *file, const char *fmt, T &&...args) {
-  //   fprintf(file, fmt, args...);
-  //   fprintf(file, "\n");
-  //   fflush(file);
-  // }
-
-  void foutput(FILE *file, const char *fmt, ...) {
-    va_list vlist;
-    va_start(vlist, fmt);
-    vfprintf(file, fmt, vlist);
-    va_end(vlist);
-    fprintf(file, "\n");
-    fflush(file);
-  }
 
 public:
   Logger() : file_(nullptr) {}
@@ -61,50 +45,46 @@ public:
 
   void SetOutput(FILE *file) { file_ = file; }
 
+  void SetLevel(int level) { level_ = level; }
+
   template <typename... T>
   void Println(int level, const char *filename, int line, const char *fmt,
                T &&...args) {
-    if (level < Level) {
+    if (level < level_) {
       return;
     }
-#if LOG_USE_TIME_LINE
     long long ts = libtime::UnixMilli();
     std::string s = libtime::Format(ts / 1000);
     int mills = int(ts % 1000);
-    fprintf(stdout, "%s.%03d%s %s:%d ", s.c_str(), mills, _levelout[level],
-            filename, line);
-#endif
-    this->foutput(stdout, fmt, args...);
+    fmt::print(stdout, "[{}.{:03d}] {} {}:{} ", s, mills,
+               _level_text_color[level], filename, line);
+    fmt::println(stdout, fmt, args...);
     if (file_) {
       std::lock_guard<std::mutex> lock(mtx_);
-#if LOG_USE_TIME_LINE
-      fprintf(file_, "%s.%03d%s %s:%d ", s.c_str(), mills, _levelout[level],
-              filename, line);
-#endif
-      this->foutput(file_, fmt, args...);
+      fmt::print(file_, "[{}.{:03d}] {} {}:{} ", s.c_str(), mills,
+                 _level_text[level], filename, line);
+      fmt::println(file_, fmt, args...);
     }
-  }
-
-  static Logger &Instance() {
-    static Logger ins;
-    return ins;
   }
 };
 
+static Logger &Default() {
+  static Logger logger;
+  return logger;
+}
+
 } // namespace liblog
 
-#define LogDebug(...)                                                          \
-  liblog::Logger::Instance().Println(liblog::DEBUG, __FILE__, __LINE__,        \
-                                     ##__VA_ARGS__)
+#define SPDLOG_DEBUG(...)                                                      \
+  liblog::Default().Println(liblog::DEBUG, __FILE__, __LINE__, ##__VA_ARGS__)
 
-#define LogInfo(...)                                                           \
-  liblog::Logger::Instance().Println(liblog::INFO, __FILE__, __LINE__,         \
-                                     ##__VA_ARGS__)
+#define SPDLOG_INFO(...)                                                       \
+  liblog::Default().Println(liblog::INFO, __FILE__, __LINE__, ##__VA_ARGS__)
 
-#define LogWarn(b, ...)                                                        \
-  liblog::Logger::Instance().Println((b) ? liblog::WARN : liblog::DEBUG,       \
-                                     __FILE__, __LINE__, ##__VA_ARGS__);
+#define SPDLOG_WARN(b, ...)                                                    \
+  liblog::Default().Println((b) ? liblog::WARN : liblog::DEBUG, __FILE__,      \
+                            __LINE__, ##__VA_ARGS__);
 
-#define LogError(b, ...)                                                       \
-  liblog::Logger::Instance().Println((b) ? liblog::ERR : liblog::DEBUG,        \
-                                     __FILE__, __LINE__, ##__VA_ARGS__);
+#define SPDLOG_ERROR(b, ...)                                                   \
+  liblog::Default().Println((b) ? liblog::ERR : liblog::DEBUG, __FILE__,       \
+                            __LINE__, ##__VA_ARGS__);
