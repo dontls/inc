@@ -33,3 +33,7 @@
 *_test
 
 librtmp/*
+asio-*
+faac/*
+spdlog-*
+fmt-*

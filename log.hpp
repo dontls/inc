@@ -49,7 +49,7 @@ static const char *_level_text_color[] = {
 
 class Logger {
 private:
-  int level_ = INFO;
+  int level_ = DEBUG;
   FILE *file_ = nullptr;
   std::mutex mtx_;
 
@@ -103,10 +103,10 @@ inline Logger &Default() {
 
 #define SPDLOG_WARN2(b, ...)                                                   \
   liblog::Default().Println((b) ? liblog::WARN : liblog::DEBUG, __FILE__,      \
-                            __LINE__, ##__VA_ARGS__)
+                            __LINE__, __VA_ARGS__)
 
 #define SPDLOG_ERROR2(b, ...)                                                  \
   liblog::Default().Println((b) ? liblog::ERR : liblog::DEBUG, __FILE__,       \
-                            __LINE__, ##__VA_ARGS__)
+                            __LINE__, __VA_ARGS__)
 
 #endif
